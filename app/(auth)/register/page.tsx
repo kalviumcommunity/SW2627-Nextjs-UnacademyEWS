@@ -54,6 +54,9 @@ export default function RegisterPage() {
         }
     }, [state]);
 
+    const testError: string = 123;
+
+
     useEffect(() => {
         if (state?.errors) {
             // eslint-disable-next-line react-hooks/set-state-in-effect

@@ -77,6 +77,8 @@ unacademy-ews/
 ├── .env.example               # Environment variable template
 ├── .gitignore
 ├── package.json
+├── Dockerfile                 # Production multi-stage Docker build
+├── .dockerignore              # Excluded files for Docker build
 ├── package-lock.json
 ├── tsconfig.json
 └── README.md
@@ -91,6 +93,7 @@ Make sure you have the following installed:
 - Node.js
 - npm
 - Git
+- Docker (optional, for containerized execution)
 
 ### 1. Clone the repository
 
@@ -141,6 +144,38 @@ To verify the production build:
 npm run build
 ```
 
+---
+
+## Running with Docker
+
+### 1. Build the Docker image
+
+```bash
+docker build -t unacademy-ews .
+```
+
+### 2. Run the Docker container
+
+Pass your `.env` file or provide `DATABASE_URL` via environment variables:
+
+```bash
+docker run -p 3000:3000 --env-file .env unacademy-ews
+```
+
+Or pass individual environment variables:
+
+```bash
+docker run -p 3000:3000 -e DATABASE_URL="your-neon-database-url" unacademy-ews
+```
+
+The containerized application will be accessible at:
+
+```text
+http://localhost:3000
+```
+
+---
+
 ## Database
 
 The project uses PostgreSQL hosted on Neon with Prisma as the ORM.
@@ -150,3 +185,4 @@ The Prisma schema is located at:
 ```text
 prisma/schema.prisma
 ```
+

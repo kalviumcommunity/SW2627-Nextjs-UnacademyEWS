@@ -42,6 +42,7 @@ export default function RegisterPage() {
 
     useEffect(() => {
         if (state?.error) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setShowError(true);
             const timer = setTimeout(() => {
                 setShowError(false);
@@ -55,6 +56,7 @@ export default function RegisterPage() {
 
     useEffect(() => {
         if (state?.errors) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setFieldErrors(state.errors);
         } else {
             setFieldErrors({});

@@ -3,7 +3,8 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@/app/generated/prisma/client";
-import { registerSchema } from "@/lib/validations/auth";
+import { registerSchema, loginSchema } from "@/lib/validations/auth";
+import { createSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 
 export async function registerUser(_previousState: unknown, formData: FormData) {
@@ -70,4 +71,57 @@ export async function registerUser(_previousState: unknown, formData: FormData) 
     }
 
     redirect("/login");
+}
+
+export async function loginUser(_previousState: unknown, formData: FormData) {
+    const result = loginSchema.safeParse({
+        email: formData.get("email"),
+        password: formData.get("password"),
+    });
+
+    if (!result.success) {
+        return {
+            success: false,
+            errors: result.error.flatten().fieldErrors,
+        };
+    }
+
+    const { email, password } = result.data;
+
+    let destination: "/dashboard/student" | "/dashboard/instructor";
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { email },
+        });
+
+        if (!user) {
+            return {
+                success: false,
+                error: "Invalid email or password.",
+            };
+        }
+
+        const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+
+        if (!passwordMatches) {
+            return {
+                success: false,
+                error: "Invalid email or password.",
+            };
+        }
+
+        await createSession({ id: user.id, role: user.role });
+        destination =
+            user.role === Role.STUDENT
+                ? "/dashboard/student"
+                : "/dashboard/instructor";
+    } catch {
+        return {
+            success: false,
+            error: "Unable to sign in right now. Please try again.",
+        };
+    }
+
+    redirect(destination);
 }

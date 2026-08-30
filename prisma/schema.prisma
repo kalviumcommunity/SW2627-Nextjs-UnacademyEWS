@@ -46,14 +46,35 @@ model Student {
   risks           StudentRisk[]
   loginActivities LoginActivity[]
   nudges          Nudge[]
+  enrollments     Enrollment[]
 }
 
 model Instructor {
   id     String @id @default(cuid())
   userId String @unique
 
-  user   User    @relation(fields: [userId], references: [id])
-  nudges Nudge[]
+  user    User         @relation(fields: [userId], references: [id])
+  nudges  Nudge[]
+  courses Course[]
+}
+
+model Course {
+  id           String @id @default(cuid())
+  courseName   String
+  instructorId String
+
+  instructor  Instructor   @relation(fields: [instructorId], references: [id])
+  enrollments Enrollment[]
+}
+
+model Enrollment {
+  id             String   @id @default(cuid())
+  studentId      String
+  courseId       String
+  enrollmentDate DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id])
+  course  Course  @relation(fields: [courseId], references: [id])
 }
 
 model StudentRisk {
@@ -86,4 +107,5 @@ model Nudge {
   student    Student    @relation(fields: [studentId], references: [id])
   instructor Instructor @relation(fields: [instructorId], references: [id])
 }
+
 

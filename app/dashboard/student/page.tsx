@@ -1,17 +1,4 @@
-import { getSession } from "@/lib/session";
-import { redirect } from "next/navigation";
-
-export default async function StudentDashboardPage() {
-    const session = await getSession();
-
-    if (!session) {
-        redirect("/login");
-    }
-
-    if (session.role !== "STUDENT") {
-        redirect("/dashboard/instructor");
-    }
-
+export default function StudentDashboardPage() {
     return (
         <main className="flex-1 p-6 sm:p-10">
             <section className="mx-auto max-w-4xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">

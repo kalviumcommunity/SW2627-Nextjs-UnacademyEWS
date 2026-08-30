@@ -9,6 +9,7 @@ type SessionRole = "STUDENT" | "INSTRUCTOR";
 export interface Session {
     userId: string;
     role: SessionRole;
+    name?: string;
     expiresAt: number;
 }
 
@@ -62,6 +63,7 @@ function parseSession(value: string): Session | null {
         return {
             userId: parsed.userId,
             role: parsed.role,
+            name: typeof parsed.name === "string" ? parsed.name : undefined,
             expiresAt: parsed.expiresAt,
         };
     } catch {
@@ -72,10 +74,11 @@ function parseSession(value: string): Session | null {
 export async function createSession(user: {
     id: string;
     role: SessionRole;
+    name?: string;
 }) {
     const expiresAt = Date.now() + SESSION_DURATION_SECONDS * 1000;
     const payload = Buffer.from(
-        JSON.stringify({ userId: user.id, role: user.role, expiresAt }),
+        JSON.stringify({ userId: user.id, role: user.role, name: user.name, expiresAt }),
     ).toString("base64url");
     const value = `${payload}.${sign(payload)}`;
     const cookieStore = await cookies();
@@ -95,3 +98,9 @@ export async function getSession() {
 
     return value ? parseSession(value) : null;
 }
+
+export async function deleteSession() {
+    const cookieStore = await cookies();
+    cookieStore.delete(SESSION_COOKIE_NAME);
+}
+

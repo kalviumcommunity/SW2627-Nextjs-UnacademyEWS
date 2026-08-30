@@ -12,6 +12,18 @@ enum Role {
   INSTRUCTOR
 }
 
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum NudgeStatus {
+  NOT_REQUIRED
+  PENDING
+  SENT
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -30,12 +42,48 @@ model Student {
   userId String @unique
   status String
 
-  user User @relation(fields: [userId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
+  risks           StudentRisk[]
+  loginActivities LoginActivity[]
+  nudges          Nudge[]
 }
 
 model Instructor {
   id     String @id @default(cuid())
   userId String @unique
 
-  user User @relation(fields: [userId], references: [id])
+  user   User    @relation(fields: [userId], references: [id])
+  nudges Nudge[]
 }
+
+model StudentRisk {
+  riskId       String    @id @default(cuid())
+  studentId    String
+  riskScore    Float
+  riskLevel    RiskLevel
+  calculatedAt DateTime  @default(now())
+  explanation  String
+
+  student Student @relation(fields: [studentId], references: [id])
+}
+
+model LoginActivity {
+  loginId   String   @id @default(cuid())
+  studentId String
+  loginTime DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id])
+}
+
+model Nudge {
+  nudgeId      String      @id @default(cuid())
+  studentId    String
+  instructorId String
+  status       NudgeStatus @default(PENDING)
+  message      String
+  sentAt       DateTime?
+
+  student    Student    @relation(fields: [studentId], references: [id])
+  instructor Instructor @relation(fields: [instructorId], references: [id])
+}
+

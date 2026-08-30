@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@/app/generated/prisma/client";
 import { registerSchema, loginSchema } from "@/lib/validations/auth";
-import { createSession } from "@/lib/session";
+import { createSession, deleteSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 
 export async function registerUser(_previousState: unknown, formData: FormData) {
@@ -111,7 +111,7 @@ export async function loginUser(_previousState: unknown, formData: FormData) {
             };
         }
 
-        await createSession({ id: user.id, role: user.role });
+        await createSession({ id: user.id, role: user.role, name: user.name });
         destination =
             user.role === Role.STUDENT
                 ? "/dashboard/student"
@@ -125,3 +125,9 @@ export async function loginUser(_previousState: unknown, formData: FormData) {
 
     redirect(destination);
 }
+
+export async function logoutUser() {
+    await deleteSession();
+    redirect("/login");
+}
+

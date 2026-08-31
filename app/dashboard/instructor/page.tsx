@@ -1,7 +1,7 @@
 import { getSession } from "@/lib/session";
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import MetricCard from "@/components/dashboard/MetricCard";
 import StudentsNeedingAttentionTable, {
     StudentWithRelations,
@@ -10,12 +10,8 @@ import StudentsNeedingAttentionTable, {
 export default async function InstructorDashboardPage() {
     const session = await getSession();
 
-    if (!session) {
+    if (!session || session.role !== "INSTRUCTOR") {
         redirect("/login");
-    }
-
-    if (session.role !== "INSTRUCTOR") {
-        redirect("/dashboard/student");
     }
 
     let instructorName = session.name || "Instructor";
@@ -53,9 +49,11 @@ export default async function InstructorDashboardPage() {
             }),
         ]);
 
-        if (user?.name) {
-            instructorName = user.name;
+        if (!user) {
+            redirect("/login");
         }
+
+        instructorName = user.name || session.name || "Instructor";
 
         students = studentRecords;
         totalStudents = students.length;

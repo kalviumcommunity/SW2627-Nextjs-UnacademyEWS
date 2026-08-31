@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
-const SESSION_COOKIE_NAME = "unacademy_ews_session";
+export const SESSION_COOKIE_NAME = "unacademy_ews_session";
 const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7;
 
 type SessionRole = "STUDENT" | "INSTRUCTOR";
@@ -29,7 +29,7 @@ function sign(payload: string) {
         .digest("base64url");
 }
 
-function parseSession(value: string): Session | null {
+export function parseSession(value: string): Session | null {
     const [payload, signature, ...extraParts] = value.split(".");
 
     if (!payload || !signature || extraParts.length > 0) {

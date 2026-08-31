@@ -15,7 +15,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("⚡ Starting ultra-fast bulk seeding for 50 students...");
+  console.log("⚡ Starting ultra-fast bulk seeding for 20 instructors, 20 courses, and 50 students...");
   const startTime = Date.now();
 
   // 1. Clean existing records
@@ -32,24 +32,86 @@ async function main() {
   // Pre-compute single password hash
   const defaultPasswordHash = await bcrypt.hash("Password123!", 10);
 
-  // 2. Prepare Instructor
-  const instructorUserId = crypto.randomUUID();
-  const instructorId = crypto.randomUUID();
-
-  const instructorUser = {
-    id: instructorUserId,
-    name: "Dr. Rajesh Sharma",
-    email: "rajesh.sharma@unacademy.com",
-    passwordHash: defaultPasswordHash,
-    role: Role.INSTRUCTOR,
-  };
-
-  // 3. Prepare Courses taught by Instructor
-  const courseData = [
-    { id: crypto.randomUUID(), courseName: "Full Stack Web Development", instructorId },
-    { id: crypto.randomUUID(), courseName: "Data Structures & Algorithms", instructorId },
-    { id: crypto.randomUUID(), courseName: "System Design & Architecture", instructorId },
+  // 2. Prepare 20 Instructors
+  const instructorProfiles = [
+    { name: "Dr. Rajesh Sharma", email: "rajesh.sharma@unacademy.com" },
+    { name: "Prof. Ananya Iyer", email: "ananya.iyer@unacademy.com" },
+    { name: "Dr. Vikram Malhotra", email: "vikram.malhotra@unacademy.com" },
+    { name: "Prof. Priya Sen", email: "priya.sen@unacademy.com" },
+    { name: "Dr. Rohan Verma", email: "rohan.verma@unacademy.com" },
+    { name: "Prof. Sneha Kulkarni", email: "sneha.kulkarni@unacademy.com" },
+    { name: "Dr. Amit Patel", email: "amit.patel@unacademy.com" },
+    { name: "Prof. Kavita Nair", email: "kavita.nair@unacademy.com" },
+    { name: "Dr. Manish Joshi", email: "manish.joshi@unacademy.com" },
+    { name: "Prof. Pooja Hegde", email: "pooja.hegde@unacademy.com" },
+    { name: "Dr. Siddharth Rao", email: "siddharth.rao@unacademy.com" },
+    { name: "Prof. Sunita Deshmukh", email: "sunita.deshmukh@unacademy.com" },
+    { name: "Dr. Arjun Kapoor", email: "arjun.kapoor@unacademy.com" },
+    { name: "Prof. Neha Gupta", email: "neha.gupta@unacademy.com" },
+    { name: "Dr. Vivek Agnihotri", email: "vivek.agnihotri@unacademy.com" },
+    { name: "Prof. Radhika Merchant", email: "radhika.merchant@unacademy.com" },
+    { name: "Dr. Sanjay Mehta", email: "sanjay.mehta@unacademy.com" },
+    { name: "Prof. Shilpa Shetty", email: "shilpa.shetty@unacademy.com" },
+    { name: "Dr. Harsh Vardhan", email: "harsh.vardhan@unacademy.com" },
+    { name: "Prof. Tanvi Bhatia", email: "tanvi.bhatia@unacademy.com" },
   ];
+
+  const instructorsToInsert: Array<{ id: string; userId: string }> = [];
+  const instructorUsers: Array<{
+    id: string;
+    name: string;
+    email: string;
+    passwordHash: string;
+    role: Role;
+  }> = [];
+
+  for (const prof of instructorProfiles) {
+    const userId = crypto.randomUUID();
+    const instructorId = crypto.randomUUID();
+
+    instructorUsers.push({
+      id: userId,
+      name: prof.name,
+      email: prof.email,
+      passwordHash: defaultPasswordHash,
+      role: Role.INSTRUCTOR,
+    });
+
+    instructorsToInsert.push({
+      id: instructorId,
+      userId,
+    });
+  }
+
+  // 3. Prepare exactly 20 Courses (assigned exactly 1 course per instructor)
+  const courseTitles = [
+    "Full Stack Web Development",
+    "Data Structures & Algorithms",
+    "System Design & Architecture",
+    "Machine Learning & AI Foundations",
+    "Database Systems & Query Optimization",
+    "Cloud Computing with AWS & Docker",
+    "Cyber Security & Ethical Hacking",
+    "DevOps & CI/CD Engineering",
+    "Mobile App Development with Flutter",
+    "Natural Language Processing & LLMs",
+    "Computer Networks & Distributed Systems",
+    "Operating Systems & Low-Level Design",
+    "Data Engineering & Big Data Pipelines",
+    "Microservices Architecture & Kubernetes",
+    "Competitive Programming & Math",
+    "Advanced Frontend Engineering & Next.js",
+    "Deep Learning & Neural Networks",
+    "Information Security & Cryptography",
+    "Blockchain & Smart Contract Development",
+    "Site Reliability Engineering & Monitoring",
+  ];
+
+  const courseData = courseTitles.map((title, idx) => ({
+    id: crypto.randomUUID(),
+    courseName: title,
+    instructorId: instructorsToInsert[idx].id,
+  }));
 
   // Helper date utility
   const now = new Date();
@@ -77,7 +139,7 @@ async function main() {
     email: string;
     passwordHash: string;
     role: Role;
-  }> = [instructorUser];
+  }> = [...instructorUsers];
   const studentsToInsert: Array<{ id: string; userId: string; status: string }> = [];
   const risksToInsert: Array<{ riskId: string; studentId: string; riskScore: number; riskLevel: RiskLevel; explanation: string; calculatedAt: Date }> = [];
   const loginsToInsert: Array<{ loginId: string; studentId: string; loginTime: Date }> = [];
@@ -115,14 +177,12 @@ async function main() {
       status: "ACTIVE",
     });
 
-    // Assign each student to a single individual course (round-robin)
-    const assignedCourse = courseData[i % courseData.length];
-    enrollmentsToInsert.push({
-      id: crypto.randomUUID(),
-      studentId,
-      courseId: assignedCourse.id,
-      enrollmentDate: daysAgo(30 + (i % 60)),
-    });
+    // Randomly enroll student in 1 to 3 distinct courses across the 20 courses
+    const numCourses = 1 + ((i * 3 + 1) % 3); // 1, 2, or 3 courses deterministically spread
+    const chosenCourseIndices = new Set<number>();
+    for (let c = 0; c < numCourses; c++) {
+      chosenCourseIndices.add((i * 7 + c * 5) % courseData.length);
+    }
 
     let explanation = "";
     let nudgeStatus: NudgeStatus = NudgeStatus.NOT_REQUIRED;
@@ -166,27 +226,34 @@ async function main() {
       });
     }
 
-    nudgesToInsert.push({
-      nudgeId: crypto.randomUUID(),
-      studentId,
-      instructorId,
-      status: nudgeStatus,
-      message: nudgeMessage,
-      sentAt,
-    });
+    // Add enrollments and nudges for each enrolled course
+    for (const courseIdx of chosenCourseIndices) {
+      const assignedCourse = courseData[courseIdx];
+
+      enrollmentsToInsert.push({
+        id: crypto.randomUUID(),
+        studentId,
+        courseId: assignedCourse.id,
+        enrollmentDate: daysAgo(30 + ((i + courseIdx) % 60)),
+      });
+
+      nudgesToInsert.push({
+        nudgeId: crypto.randomUUID(),
+        studentId,
+        instructorId: assignedCourse.instructorId,
+        status: nudgeStatus,
+        message: nudgeMessage,
+        sentAt,
+      });
+    }
   }
 
   // 6. Execute bulk batch insertions
   console.log("💾 Inserting users in bulk...");
   await prisma.user.createMany({ data: usersToInsert });
 
-  console.log("💾 Inserting instructor, courses, and students in bulk...");
-  await prisma.instructor.create({
-    data: {
-      id: instructorId,
-      userId: instructorUserId,
-    },
-  });
+  console.log("💾 Inserting instructors, courses, and students in bulk...");
+  await prisma.instructor.createMany({ data: instructorsToInsert });
 
   await prisma.course.createMany({ data: courseData });
 
@@ -205,8 +272,7 @@ async function main() {
   await prisma.nudge.createMany({ data: nudgesToInsert });
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-  console.log(`\n⚡ Bulk seeding completed successfully in ${duration}s! (1 Instructor + ${courseData.length} Courses + ${studentNames.length} Students + ${enrollmentsToInsert.length} Enrollments)`);
-
+  console.log(`\n⚡ Bulk seeding completed successfully in ${duration}s! (${instructorProfiles.length} Instructors (1 course each) + ${courseData.length} Courses + ${studentNames.length} Students + ${enrollmentsToInsert.length} Multi-Course Enrollments)`);
 }
 
 main()

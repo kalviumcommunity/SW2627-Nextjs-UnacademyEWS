@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/session";
+import { getSession, deleteSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import StudentManagementTable, {
@@ -21,6 +21,7 @@ export default async function InstructorStudentsPage() {
     });
 
     if (!user) {
+        await deleteSession();
         redirect("/login");
     }
 
@@ -38,60 +39,39 @@ export default async function InstructorStudentsPage() {
     }
 
     // Fetch instructor courses
-    let courses: CourseOption[] = await prisma.course.findMany({
+    const courses: CourseOption[] = await prisma.course.findMany({
         where: { instructorId: instructor.id },
         select: { id: true, courseName: true },
         orderBy: { courseName: "asc" },
     });
 
-    // Auto-provision standard courses & enrollments if none exist
-    if (courses.length === 0) {
-        await prisma.course.createMany({
-            data: [
-                { courseName: "Full Stack Web Development", instructorId: instructor.id },
-                { courseName: "Data Structures & Algorithms", instructorId: instructor.id },
-                { courseName: "System Design & Architecture", instructorId: instructor.id },
-            ],
-        });
-
-        courses = await prisma.course.findMany({
-            where: { instructorId: instructor.id },
-            select: { id: true, courseName: true },
-            orderBy: { courseName: "asc" },
-        });
-
-        const allStudents = await prisma.student.findMany({ select: { id: true } });
-        if (allStudents.length > 0 && courses.length > 0) {
-            await prisma.enrollment.createMany({
-                data: allStudents.map((s, i) => ({
-                    studentId: s.id,
-                    courseId: courses[i % courses.length].id,
-                })),
-                skipDuplicates: true,
-            });
-        }
-    }
-
     const courseIds = courses.map((c) => c.id);
 
     // Fetch students enrolled in this instructor's courses
-    const studentRecords = await prisma.student.findMany({
-        where: {
-            enrollments: {
-                some: { courseId: { in: courseIds } },
-            },
-        },
-        include: {
-            user: { select: { name: true, email: true } },
-            risks: { orderBy: { calculatedAt: "desc" }, take: 1 },
-            loginActivities: { orderBy: { loginTime: "desc" }, take: 1 },
-            nudges: { orderBy: { nudgeId: "desc" }, take: 1 },
-            enrollments: {
-                where: { courseId: { in: courseIds } },
-                include: { course: { select: { id: true, courseName: true } } },
-            },
-        },
-    });
+    const studentRecords =
+        courseIds.length > 0
+            ? await prisma.student.findMany({
+                  where: {
+                      enrollments: {
+                          some: { courseId: { in: courseIds } },
+                      },
+                  },
+                  include: {
+                      user: { select: { name: true, email: true } },
+                      risks: { orderBy: { calculatedAt: "desc" }, take: 1 },
+                      loginActivities: { orderBy: { loginTime: "desc" }, take: 1 },
+                      nudges: {
+                          where: { instructorId: instructor.id },
+                          orderBy: { nudgeId: "desc" },
+                          take: 1,
+                      },
+                      enrollments: {
+                          where: { courseId: { in: courseIds } },
+                          include: { course: { select: { id: true, courseName: true } } },
+                      },
+                  },
+              })
+            : [];
 
     const students: StudentTableItem[] = studentRecords.map((s) => {
         const risk = s.risks[0];

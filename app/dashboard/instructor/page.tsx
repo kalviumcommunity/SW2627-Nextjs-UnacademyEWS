@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/session";
+import { getSession, deleteSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -21,53 +21,79 @@ export default async function InstructorDashboardPage() {
     let mediumRiskCount = 0;
     let lowRiskCount = 0;
 
+    let shouldRedirect = false;
+
     try {
-        // Parallelized single-pass data fetching
-        const [user, studentRecords] = await Promise.all([
-            prisma.user.findUnique({
-                where: { id: session.userId },
-                select: { name: true },
-            }),
-            prisma.student.findMany({
-                include: {
-                    user: {
-                        select: { name: true, email: true },
-                    },
-                    risks: {
-                        orderBy: { calculatedAt: "desc" },
-                        take: 1,
-                    },
-                    loginActivities: {
-                        orderBy: { loginTime: "desc" },
-                        take: 1,
-                    },
-                    nudges: {
-                        orderBy: { nudgeId: "desc" },
-                        take: 1,
+        const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: {
+                name: true,
+                instructor: {
+                    select: {
+                        id: true,
+                        courses: {
+                            select: { id: true },
+                        },
                     },
                 },
-            }),
-        ]);
+            },
+        });
 
         if (!user) {
-            redirect("/login");
+            shouldRedirect = true;
+        } else {
+            instructorName = user.name || session.name || "Instructor";
+            const instructorCourses = user.instructor?.courses || [];
+            const courseIds = instructorCourses.map((c) => c.id);
+
+            if (courseIds.length > 0) {
+                students = await prisma.student.findMany({
+                    where: {
+                        enrollments: {
+                            some: { courseId: { in: courseIds } },
+                        },
+                    },
+                    include: {
+                        user: {
+                            select: { name: true, email: true },
+                        },
+                        risks: {
+                            orderBy: { calculatedAt: "desc" },
+                            take: 1,
+                        },
+                        loginActivities: {
+                            orderBy: { loginTime: "desc" },
+                            take: 1,
+                        },
+                        nudges: {
+                            where: { instructorId: user.instructor?.id },
+                            orderBy: { nudgeId: "desc" },
+                            take: 1,
+                        },
+                    },
+                });
+            } else {
+                students = [];
+            }
+
+            totalStudents = students.length;
+            highRiskCount = students.filter(
+                (s) => s.risks[0]?.riskLevel === "HIGH",
+            ).length;
+            mediumRiskCount = students.filter(
+                (s) => s.risks[0]?.riskLevel === "MEDIUM",
+            ).length;
+            lowRiskCount = students.filter(
+                (s) => s.risks[0]?.riskLevel === "LOW" || s.risks.length === 0,
+            ).length;
         }
-
-        instructorName = user.name || session.name || "Instructor";
-
-        students = studentRecords;
-        totalStudents = students.length;
-        highRiskCount = students.filter(
-            (s) => s.risks[0]?.riskLevel === "HIGH",
-        ).length;
-        mediumRiskCount = students.filter(
-            (s) => s.risks[0]?.riskLevel === "MEDIUM",
-        ).length;
-        lowRiskCount = students.filter(
-            (s) => s.risks[0]?.riskLevel === "LOW" || s.risks.length === 0,
-        ).length;
     } catch (error) {
         console.error("Failed to load dashboard data:", error);
+    }
+
+    if (shouldRedirect) {
+        await deleteSession();
+        redirect("/login");
     }
 
     return (

@@ -35,7 +35,7 @@ export default function Sidebar() {
     };
 
     return (
-        <aside className="w-56 shrink-0 border-r border-zinc-200 bg-[#f9fafb] flex flex-col justify-between p-4 min-h-[calc(100vh-3.5rem)]">
+        <aside className="w-56 shrink-0 border-r border-zinc-200 bg-[#f9fafb] flex flex-col justify-between p-4 h-[calc(100vh-3.5rem)] sticky top-14 self-start overflow-y-auto">
             <div>
                 {/* Primary Navigation */}
                 <nav className="space-y-1">

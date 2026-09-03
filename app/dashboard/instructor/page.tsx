@@ -1,4 +1,4 @@
-import { getSession, deleteSession } from "@/lib/session";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -92,7 +92,6 @@ export default async function InstructorDashboardPage() {
     }
 
     if (shouldRedirect) {
-        await deleteSession();
         redirect("/login");
     }
 

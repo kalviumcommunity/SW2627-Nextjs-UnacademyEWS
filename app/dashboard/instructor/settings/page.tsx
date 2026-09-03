@@ -1,4 +1,4 @@
-import { getSession, deleteSession } from "@/lib/session";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import SettingsForm from "@/components/dashboard/SettingsForm";
@@ -20,7 +20,6 @@ export default async function InstructorSettingsPage() {
     });
 
     if (!user) {
-        await deleteSession();
         redirect("/login");
     }
 

@@ -1,4 +1,4 @@
-import { getSession, deleteSession } from "@/lib/session";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import StudentManagementTable, {
@@ -21,7 +21,6 @@ export default async function InstructorStudentsPage() {
     });
 
     if (!user) {
-        await deleteSession();
         redirect("/login");
     }
 

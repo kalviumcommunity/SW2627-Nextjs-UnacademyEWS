@@ -47,6 +47,7 @@ model Student {
   loginActivities LoginActivity[]
   nudges          Nudge[]
   enrollments     Enrollment[]
+  quizAttempts    QuizAttempt[]
 }
 
 model Instructor {
@@ -59,12 +60,13 @@ model Instructor {
 }
 
 model Course {
-  id           String @id @default(cuid())
+  id           String  @id @default(cuid())
   courseName   String
-  instructorId String
+  instructorId String?
 
-  instructor  Instructor   @relation(fields: [instructorId], references: [id])
+  instructor  Instructor?  @relation(fields: [instructorId], references: [id])
   enrollments Enrollment[]
+  quizzes     Quiz[]
 }
 
 model Enrollment {
@@ -107,5 +109,31 @@ model Nudge {
   student    Student    @relation(fields: [studentId], references: [id])
   instructor Instructor @relation(fields: [instructorId], references: [id])
 }
+
+model Quiz {
+  id             String   @id @default(cuid())
+  courseId       String
+  quizTitle      String
+  dueDate        DateTime
+  questionsCount Int
+
+  course   Course        @relation(fields: [courseId], references: [id])
+  attempts QuizAttempt[]
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  studentId   String
+  quizId      String
+  completed   Boolean
+  score       Float
+  totalScore  Float
+  responses   Json?
+  submittedAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id])
+  quiz    Quiz    @relation(fields: [quizId], references: [id])
+}
+
 
 

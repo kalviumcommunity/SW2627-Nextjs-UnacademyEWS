@@ -1,6 +1,7 @@
 import "dotenv/config";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
+import { faker } from "@faker-js/faker";
 import { PrismaClient } from "../app/generated/prisma/client";
 import { Role, RiskLevel, NudgeStatus } from "../app/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -14,11 +15,16 @@ const pool = new Pool({
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+// Set reproducible seed for faker if needed, or leave dynamic
+faker.seed(12345);
+
 async function main() {
-  console.log("⚡ Starting ultra-fast bulk seeding for 20 instructors, 20 courses, and 50 students...");
+  console.log("⚡ Starting faker.js dynamic bulk seeding for 8 instructors, 20 technical courses, and 200 students...");
   const startTime = Date.now();
 
-  // 1. Clean existing records
+  // 1. Clean existing records in reverse dependency order
+  await prisma.quizAttempt.deleteMany();
+  await prisma.quiz.deleteMany();
   await prisma.enrollment.deleteMany();
   await prisma.course.deleteMany();
   await prisma.nudge.deleteMany();
@@ -32,30 +38,8 @@ async function main() {
   // Pre-compute single password hash
   const defaultPasswordHash = await bcrypt.hash("Password123!", 10);
 
-  // 2. Prepare 20 Instructors
-  const instructorProfiles = [
-    { name: "Dr. Rajesh Sharma", email: "rajesh.sharma@unacademy.com" },
-    { name: "Prof. Ananya Iyer", email: "ananya.iyer@unacademy.com" },
-    { name: "Dr. Vikram Malhotra", email: "vikram.malhotra@unacademy.com" },
-    { name: "Prof. Priya Sen", email: "priya.sen@unacademy.com" },
-    { name: "Dr. Rohan Verma", email: "rohan.verma@unacademy.com" },
-    { name: "Prof. Sneha Kulkarni", email: "sneha.kulkarni@unacademy.com" },
-    { name: "Dr. Amit Patel", email: "amit.patel@unacademy.com" },
-    { name: "Prof. Kavita Nair", email: "kavita.nair@unacademy.com" },
-    { name: "Dr. Manish Joshi", email: "manish.joshi@unacademy.com" },
-    { name: "Prof. Pooja Hegde", email: "pooja.hegde@unacademy.com" },
-    { name: "Dr. Siddharth Rao", email: "siddharth.rao@unacademy.com" },
-    { name: "Prof. Sunita Deshmukh", email: "sunita.deshmukh@unacademy.com" },
-    { name: "Dr. Arjun Kapoor", email: "arjun.kapoor@unacademy.com" },
-    { name: "Prof. Neha Gupta", email: "neha.gupta@unacademy.com" },
-    { name: "Dr. Vivek Agnihotri", email: "vivek.agnihotri@unacademy.com" },
-    { name: "Prof. Radhika Merchant", email: "radhika.merchant@unacademy.com" },
-    { name: "Dr. Sanjay Mehta", email: "sanjay.mehta@unacademy.com" },
-    { name: "Prof. Shilpa Shetty", email: "shilpa.shetty@unacademy.com" },
-    { name: "Dr. Harsh Vardhan", email: "harsh.vardhan@unacademy.com" },
-    { name: "Prof. Tanvi Bhatia", email: "tanvi.bhatia@unacademy.com" },
-  ];
-
+  // 2. Prepare 8 Instructors dynamically using faker.js
+  const TOTAL_INSTRUCTORS = 8;
   const instructorsToInsert: Array<{ id: string; userId: string }> = [];
   const instructorUsers: Array<{
     id: string;
@@ -65,14 +49,20 @@ async function main() {
     role: Role;
   }> = [];
 
-  for (const prof of instructorProfiles) {
+  for (let i = 1; i <= TOTAL_INSTRUCTORS; i++) {
     const userId = crypto.randomUUID();
     const instructorId = crypto.randomUUID();
+    const name = `Prof. ${faker.person.firstName()} ${faker.person.lastName()}`;
+    const email = faker.internet.email({
+      firstName: name.replace("Prof. ", "").split(" ")[0],
+      lastName: name.split(" ")[1] || "instructor",
+      provider: "unacademy.com",
+    }).toLowerCase();
 
     instructorUsers.push({
       id: userId,
-      name: prof.name,
-      email: prof.email,
+      name,
+      email,
       passwordHash: defaultPasswordHash,
       role: Role.INSTRUCTOR,
     });
@@ -83,56 +73,81 @@ async function main() {
     });
   }
 
-  // 3. Prepare exactly 20 Courses (assigned exactly 1 course per instructor)
-  const courseTitles = [
-    "Full Stack Web Development",
+  // 3. Prepare 20 Technical Courses dynamically using faker.js
+  const TOTAL_COURSES = 20;
+  const technicalTopics = [
+    "Full-Stack Web Development",
     "Data Structures & Algorithms",
     "System Design & Architecture",
-    "Machine Learning & AI Foundations",
-    "Database Systems & Query Optimization",
-    "Cloud Computing with AWS & Docker",
-    "Cyber Security & Ethical Hacking",
-    "DevOps & CI/CD Engineering",
-    "Mobile App Development with Flutter",
-    "Natural Language Processing & LLMs",
-    "Computer Networks & Distributed Systems",
-    "Operating Systems & Low-Level Design",
-    "Data Engineering & Big Data Pipelines",
-    "Microservices Architecture & Kubernetes",
-    "Competitive Programming & Math",
-    "Advanced Frontend Engineering & Next.js",
+    "Machine Learning & AI Engineering",
+    "Cloud Computing with AWS & DevOps",
+    "Cybersecurity & Network Defense",
+    "Database Systems & Query Tuning",
+    "Mobile App Development with React Native",
+    "Backend Engineering with Microservices",
+    "Data Science & Predictive Analytics",
+    "Kubernetes & Container Orchestration",
+    "Modern Frontend Engineering with TypeScript",
+    "Blockchain & Smart Contract Architecture",
+    "Operating Systems & Low-Level C++",
+    "GraphQL & High-Performance REST APIs",
+    "Compilers & Language Design",
+    "Computer Networks & Protocols",
+    "Agile Software Engineering & CI/CD",
     "Deep Learning & Neural Networks",
-    "Information Security & Cryptography",
-    "Blockchain & Smart Contract Development",
-    "Site Reliability Engineering & Monitoring",
+    "Site Reliability Engineering (SRE)",
   ];
 
-  const courseData = courseTitles.map((title, idx) => ({
-    id: crypto.randomUUID(),
-    courseName: title,
-    instructorId: instructorsToInsert[idx].id,
-  }));
+  const courseData = Array.from({ length: TOTAL_COURSES }, (_, idx) => {
+    const assignedInstructorIndex = idx % TOTAL_INSTRUCTORS;
+    const topic = technicalTopics[idx % technicalTopics.length];
+    const modifier = faker.helpers.arrayElement(["Advanced", "Applied", "Core", "Modern", "Mastering", "Fundamentals of"]);
+    const courseName = `${modifier} ${topic}`;
+
+    return {
+      id: crypto.randomUUID(),
+      courseName,
+      instructorId: instructorsToInsert[assignedInstructorIndex].id,
+    };
+  });
 
   // Helper date utility
   const now = new Date();
   const daysAgo = (days: number, hours = 0) =>
     new Date(now.getTime() - days * 24 * 60 * 60 * 1000 - hours * 60 * 60 * 1000);
 
-  // 4. Raw dataset for 50 students
-  const studentNames = [
-    "Aarav Patel", "Priya Sharma", "Rohan Gupta", "Sneha Reddy", "Karan Johar",
-    "Diya Sengupta", "Arjun Rampal", "Ishita Bose", "Nikhil Chawla", "Kavya Menon",
-    "Siddharth Rao", "Anika Roy", "Manish Pandey", "Pooja Hegde", "Varun Dhawan",
-    "Shruti Haasan", "Gaurav Kapoor", "Bhavna Mishra", "Vikram Malhotra", "Ananya Iyer",
-    "Kabir Mehta", "Tanvi Deshmukh", "Harsh Vardhan", "Rhea Chakraborty", "Devendra Joshi",
-    "Neelam Kothari", "Pranav Mukhopadhyay", "Simran Kaur", "Tarun Bajaj", "Zoya Akhtar",
-    "Yashvardhan Singhania", "Pallavi Shinde", "Omkar Salunkhe", "Gayatri Pillai", "Deepak Trivedi",
-    "Aditya Verma", "Meera Nair", "Rishi Chatterjee", "Kunal Kapoor", "Natasha Roy",
-    "Saurabh Shukla", "Esha Deol", "Alok Nath", "Bipasha Basu", "Farhan Akhtar",
-    "Juhi Chawla", "Ishaan Kapoor", "Madhavan Balaji", "Preity Zinta", "Abhay Deol"
-  ];
+  // 4. Prepare Quizzes per course (2 quizzes per course => 40 total)
+  const quizzesToInsert: Array<{
+    id: string;
+    courseId: string;
+    quizTitle: string;
+    dueDate: Date;
+    questionsCount: number;
+  }> = [];
 
-  // 5. Prepare bulk arrays for batch insert
+  for (const course of courseData) {
+    const courseShort = course.courseName.split(" ")[1] || "Technical";
+    quizzesToInsert.push({
+      id: crypto.randomUUID(),
+      courseId: course.id,
+      quizTitle: `${courseShort} Mid-Term Assessment`,
+      dueDate: daysAgo(5),
+      questionsCount: 10,
+    });
+
+    quizzesToInsert.push({
+      id: crypto.randomUUID(),
+      courseId: course.id,
+      quizTitle: `${courseShort} Practical Milestone Evaluation`,
+      dueDate: daysAgo(-7),
+      questionsCount: 15,
+    });
+  }
+
+  // 5. Prepare 200 Students dynamically using faker.js
+  const TOTAL_STUDENTS = 200;
+  const usedEmails = new Set<string>();
+
   const usersToInsert: Array<{
     id: string;
     name: string;
@@ -140,23 +155,42 @@ async function main() {
     passwordHash: string;
     role: Role;
   }> = [...instructorUsers];
+
   const studentsToInsert: Array<{ id: string; userId: string; status: string }> = [];
   const risksToInsert: Array<{ riskId: string; studentId: string; riskScore: number; riskLevel: RiskLevel; explanation: string; calculatedAt: Date }> = [];
   const loginsToInsert: Array<{ loginId: string; studentId: string; loginTime: Date }> = [];
   const nudgesToInsert: Array<{ nudgeId: string; studentId: string; instructorId: string; status: NudgeStatus; message: string; sentAt: Date | null }> = [];
   const enrollmentsToInsert: Array<{ id: string; studentId: string; courseId: string; enrollmentDate: Date }> = [];
+  const attemptsToInsert: Array<{
+    id: string;
+    studentId: string;
+    quizId: string;
+    completed: boolean;
+    score: number;
+    totalScore: number;
+    responses: string;
+    submittedAt: Date;
+  }> = [];
 
-  for (let i = 0; i < studentNames.length; i++) {
-    const name = studentNames[i];
-    const emailPrefix = name.toLowerCase().replace(/\s+/g, ".");
-    const email = `${emailPrefix}@student.unacademy.com`;
+  for (let i = 0; i < TOTAL_STUDENTS; i++) {
+    const firstName = faker.person.firstName();
+    const lastName = faker.person.lastName();
+    const name = `${firstName} ${lastName}`;
 
-    // Linear spread of risk scores from 6.0 to 98.0
-    const riskScore = Math.round((6.0 + (i / (studentNames.length - 1)) * 92.0) * 10) / 10;
+    let email = faker.internet.email({ firstName, lastName, provider: "unacademy.com" }).toLowerCase();
+    let dupCounter = 1;
+    while (usedEmails.has(email)) {
+      email = faker.internet.email({ firstName: `${firstName}${dupCounter}`, lastName, provider: "unacademy.com" }).toLowerCase();
+      dupCounter++;
+    }
+    usedEmails.add(email);
+
+    // Linear spread of risk scores aligned with Low (0-29), Medium (30-69), High (70-100)
+    const riskScore = Math.round((6.0 + (i / (TOTAL_STUDENTS - 1)) * 92.0) * 10) / 10;
     const riskLevel =
       riskScore >= 70
         ? RiskLevel.HIGH
-        : riskScore >= 35
+        : riskScore >= 30
         ? RiskLevel.MEDIUM
         : RiskLevel.LOW;
 
@@ -177,12 +211,10 @@ async function main() {
       status: "ACTIVE",
     });
 
-    // Randomly enroll student in 1 to 3 distinct courses across the 20 courses
-    const numCourses = 1 + ((i * 3 + 1) % 3); // 1, 2, or 3 courses deterministically spread
-    const chosenCourseIndices = new Set<number>();
-    for (let c = 0; c < numCourses; c++) {
-      chosenCourseIndices.add((i * 7 + c * 5) % courseData.length);
-    }
+    // Assign courses evenly
+    const primaryCourseIndex = i % TOTAL_COURSES;
+    const secondaryCourseIndex = (i + 7) % TOTAL_COURSES;
+    const chosenCourseIndices = new Set<number>([primaryCourseIndex, secondaryCourseIndex]);
 
     let explanation = "";
     let nudgeStatus: NudgeStatus = NudgeStatus.NOT_REQUIRED;
@@ -194,17 +226,18 @@ async function main() {
       explanation = "High platform interaction, regular attendance, and >85% quiz completion rate.";
       nudgeStatus = NudgeStatus.NOT_REQUIRED;
       nudgeMessage = "Outstanding consistency in your coursework! Keep up the momentum.";
+      sentAt = null;
       loginDays = [0, 1, 2, 3, 5, 7];
     } else if (riskLevel === RiskLevel.MEDIUM) {
       explanation = "Login gaps extending beyond 4-6 days. Quiz performance dropped below target threshold.";
       nudgeStatus = i % 2 === 0 ? NudgeStatus.PENDING : NudgeStatus.SENT;
-      nudgeMessage = `Hi ${name.split(" ")[0]}, we noticed a dip in your practice submissions. Let us know if you need mentor assistance.`;
+      nudgeMessage = `Hi ${firstName}, we noticed a dip in your practice submissions. Let us know if you need mentor assistance.`;
       sentAt = nudgeStatus === NudgeStatus.SENT ? daysAgo(2) : null;
       loginDays = [3, 7, 12];
     } else {
       explanation = "Critical disengagement alert. Extended period of inactivity with multiple missed milestones.";
       nudgeStatus = i % 2 === 0 ? NudgeStatus.SENT : NudgeStatus.PENDING;
-      nudgeMessage = `Hi ${name.split(" ")[0]}, urgent check-in regarding your coursework progress and milestone completion.`;
+      nudgeMessage = `Hi ${firstName}, urgent check-in regarding your coursework progress and milestone completion.`;
       sentAt = nudgeStatus === NudgeStatus.SENT ? daysAgo(4) : null;
       loginDays = [14, 25];
     }
@@ -226,7 +259,7 @@ async function main() {
       });
     }
 
-    // Add enrollments and nudges for each enrolled course
+    // Add enrollments, quiz attempts, and nudges for each enrolled course
     for (const courseIdx of chosenCourseIndices) {
       const assignedCourse = courseData[courseIdx];
 
@@ -237,14 +270,31 @@ async function main() {
         enrollmentDate: daysAgo(30 + ((i + courseIdx) % 60)),
       });
 
-      nudgesToInsert.push({
-        nudgeId: crypto.randomUUID(),
-        studentId,
-        instructorId: assignedCourse.instructorId,
-        status: nudgeStatus,
-        message: nudgeMessage,
-        sentAt,
-      });
+      if (assignedCourse.instructorId) {
+        nudgesToInsert.push({
+          nudgeId: crypto.randomUUID(),
+          studentId,
+          instructorId: assignedCourse.instructorId,
+          status: nudgeStatus,
+          message: nudgeMessage,
+          sentAt,
+        });
+      }
+
+      // Add quiz attempts for quizzes in this course
+      const courseQuizzes = quizzesToInsert.filter((q) => q.courseId === assignedCourse.id);
+      for (const quiz of courseQuizzes) {
+        attemptsToInsert.push({
+          id: crypto.randomUUID(),
+          studentId,
+          quizId: quiz.id,
+          completed: riskLevel !== RiskLevel.HIGH || i % 2 === 0,
+          score: riskLevel === RiskLevel.LOW ? 9 : riskLevel === RiskLevel.MEDIUM ? 6 : 3,
+          totalScore: 10,
+          responses: JSON.stringify({ q1: "A", q2: "B" }),
+          submittedAt: daysAgo(3),
+        });
+      }
     }
   }
 
@@ -254,13 +304,17 @@ async function main() {
 
   console.log("💾 Inserting instructors, courses, and students in bulk...");
   await prisma.instructor.createMany({ data: instructorsToInsert });
-
   await prisma.course.createMany({ data: courseData });
-
   await prisma.student.createMany({ data: studentsToInsert });
+
+  console.log("💾 Inserting quizzes in bulk...");
+  await prisma.quiz.createMany({ data: quizzesToInsert });
 
   console.log("💾 Inserting enrollments in bulk...");
   await prisma.enrollment.createMany({ data: enrollmentsToInsert });
+
+  console.log("💾 Inserting quiz attempts in bulk...");
+  await prisma.quizAttempt.createMany({ data: attemptsToInsert });
 
   console.log("💾 Inserting risk records in bulk...");
   await prisma.studentRisk.createMany({ data: risksToInsert });
@@ -272,7 +326,7 @@ async function main() {
   await prisma.nudge.createMany({ data: nudgesToInsert });
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-  console.log(`\n⚡ Bulk seeding completed successfully in ${duration}s! (${instructorProfiles.length} Instructors (1 course each) + ${courseData.length} Courses + ${studentNames.length} Students + ${enrollmentsToInsert.length} Multi-Course Enrollments)`);
+  console.log(`\n⚡ Bulk seeding completed successfully in ${duration}s! (${TOTAL_INSTRUCTORS} Instructors + ${TOTAL_COURSES} Courses + ${quizzesToInsert.length} Quizzes + ${TOTAL_STUDENTS} Students + ${attemptsToInsert.length} Quiz Attempts)`);
 }
 
 main()

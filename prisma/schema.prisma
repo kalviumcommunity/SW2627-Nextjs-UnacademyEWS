@@ -115,7 +115,7 @@ model Quiz {
   courseId       String
   quizTitle      String
   dueDate        DateTime
-  questionsCount Int
+  questionsCount Int      @default(5)
 
   course   Course        @relation(fields: [courseId], references: [id])
   attempts QuizAttempt[]

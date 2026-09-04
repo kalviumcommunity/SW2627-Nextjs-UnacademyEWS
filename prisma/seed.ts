@@ -132,7 +132,7 @@ async function main() {
       courseId: course.id,
       quizTitle: `${courseShort} Mid-Term Assessment`,
       dueDate: daysAgo(5),
-      questionsCount: 10,
+      questionsCount: 5,
     });
 
     quizzesToInsert.push({
@@ -140,7 +140,7 @@ async function main() {
       courseId: course.id,
       quizTitle: `${courseShort} Practical Milestone Evaluation`,
       dueDate: daysAgo(-7),
-      questionsCount: 15,
+      questionsCount: 5,
     });
   }
 
@@ -185,14 +185,21 @@ async function main() {
     }
     usedEmails.add(email);
 
-    // Linear spread of risk scores aligned with Low (0-29), Medium (30-69), High (70-100)
-    const riskScore = Math.round((6.0 + (i / (TOTAL_STUDENTS - 1)) * 92.0) * 10) / 10;
-    const riskLevel =
-      riskScore >= 70
-        ? RiskLevel.HIGH
-        : riskScore >= 30
-        ? RiskLevel.MEDIUM
-        : RiskLevel.LOW;
+    let riskScore: number;
+    let riskLevel: RiskLevel;
+
+    // Distribute students across tiers:
+    // Low (0-29 inclusive), Medium (30-69 inclusive), High (70-100 inclusive)
+    if (i < 70) {
+      riskLevel = RiskLevel.LOW;
+      riskScore = faker.number.int({ min: 0, max: 29 });
+    } else if (i < 140) {
+      riskLevel = RiskLevel.MEDIUM;
+      riskScore = faker.number.int({ min: 30, max: 69 });
+    } else {
+      riskLevel = RiskLevel.HIGH;
+      riskScore = faker.number.int({ min: 70, max: 98 });
+    }
 
     const studentUserId = crypto.randomUUID();
     const studentId = crypto.randomUUID();
@@ -227,19 +234,19 @@ async function main() {
       nudgeStatus = NudgeStatus.NOT_REQUIRED;
       nudgeMessage = "Outstanding consistency in your coursework! Keep up the momentum.";
       sentAt = null;
-      loginDays = [0, 1, 2, 3, 5, 7];
+      loginDays = [i % 4, (i % 4) + 2, (i % 4) + 5];
     } else if (riskLevel === RiskLevel.MEDIUM) {
       explanation = "Login gaps extending beyond 4-6 days. Quiz performance dropped below target threshold.";
       nudgeStatus = i % 2 === 0 ? NudgeStatus.PENDING : NudgeStatus.SENT;
       nudgeMessage = `Hi ${firstName}, we noticed a dip in your practice submissions. Let us know if you need mentor assistance.`;
       sentAt = nudgeStatus === NudgeStatus.SENT ? daysAgo(2) : null;
-      loginDays = [3, 7, 12];
+      loginDays = [5 + (i % 5), 12, 18];
     } else {
       explanation = "Critical disengagement alert. Extended period of inactivity with multiple missed milestones.";
-      nudgeStatus = i % 2 === 0 ? NudgeStatus.SENT : NudgeStatus.PENDING;
+      nudgeStatus = i % 2 === 0 ? NudgeStatus.PENDING : NudgeStatus.SENT;
       nudgeMessage = `Hi ${firstName}, urgent check-in regarding your coursework progress and milestone completion.`;
       sentAt = nudgeStatus === NudgeStatus.SENT ? daysAgo(4) : null;
-      loginDays = [14, 25];
+      loginDays = [14 + (i % 8), 28, 40];
     }
 
     risksToInsert.push({
@@ -289,8 +296,8 @@ async function main() {
           studentId,
           quizId: quiz.id,
           completed: riskLevel !== RiskLevel.HIGH || i % 2 === 0,
-          score: riskLevel === RiskLevel.LOW ? 9 : riskLevel === RiskLevel.MEDIUM ? 6 : 3,
-          totalScore: 10,
+          score: riskLevel === RiskLevel.LOW ? 5 : riskLevel === RiskLevel.MEDIUM ? 2 : 1,
+          totalScore: 5,
           responses: JSON.stringify({ q1: "A", q2: "B" }),
           submittedAt: daysAgo(3),
         });

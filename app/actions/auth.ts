@@ -2,11 +2,11 @@
 
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { Role, RiskLevel } from "@/app/generated/prisma/client";
+import { Role, RiskLevel, NudgeStatus } from "@/app/generated/prisma/client";
 import { registerSchema, loginSchema } from "@/lib/validations/auth";
 import { createSession, deleteSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import { updateStudentRiskScore } from "@/lib/riskEngine";
+import { updateStudentRiskScore, syncInstructorStudentRisks } from "@/lib/riskEngine";
 import { assignCourseToNewInstructor } from "@/lib/distributionEngine";
 
 export async function registerUser(_previousState: unknown, formData: FormData) {
@@ -83,6 +83,17 @@ export async function registerUser(_previousState: unknown, formData: FormData) 
                         courseId: randomCourse.id,
                     },
                 });
+
+                if (randomCourse.instructorId) {
+                    await prisma.nudge.create({
+                        data: {
+                            studentId,
+                            instructorId: randomCourse.instructorId,
+                            status: NudgeStatus.NOT_REQUIRED,
+                            message: "Outstanding consistency in your coursework! Keep up the momentum.",
+                        },
+                    });
+                }
             }
 
             await prisma.studentRisk.create({
@@ -129,7 +140,7 @@ export async function loginUser(_previousState: unknown, formData: FormData) {
     try {
         const user = await prisma.user.findUnique({
             where: { email },
-            include: { student: true },
+            include: { student: true, instructor: true },
         });
 
         if (!user) {
@@ -159,12 +170,18 @@ export async function loginUser(_previousState: unknown, formData: FormData) {
             await updateStudentRiskScore(user.student.id);
         }
 
+        // Check for past-due quizzes and update student risk scores for instructor's courses
+        if (user.role === Role.INSTRUCTOR && user.instructor) {
+            await syncInstructorStudentRisks(user.instructor.id);
+        }
+
         await createSession({ id: user.id, role: user.role, name: user.name });
         destination =
             user.role === Role.STUDENT
                 ? "/dashboard/student"
                 : "/dashboard/instructor";
-    } catch {
+    } catch (error) {
+        console.error("Login error in loginUser:", error);
         return {
             success: false,
             error: "Unable to sign in right now. Please try again.",

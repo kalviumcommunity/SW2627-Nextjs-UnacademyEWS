@@ -158,89 +158,105 @@ export async function deleteInstructorAccount() {
                 },
             });
 
-            await prisma.$transaction(async (tx) => {
-                if (otherInstructors.length > 0) {
-                    // Create a mutable copy to track course assignments dynamically
-                    const instructorPool = otherInstructors.map((inst) => ({
-                        id: inst.id,
-                        courseCount: inst.courses.length,
-                    }));
+            await prisma.$transaction(
+                async (tx) => {
+                    if (otherInstructors.length > 0) {
+                        // Create a mutable copy to track course assignments dynamically
+                        const instructorPool = otherInstructors.map((inst) => ({
+                            id: inst.id,
+                            courseCount: inst.courses.length,
+                        }));
 
-                    for (const course of currentInstructor.courses) {
-                        // 1. First priority: instructors with 0 courses assigned
-                        const zeroCourseInstructors = instructorPool.filter(
-                            (inst) => inst.courseCount === 0,
-                        );
-
-                        let targetInstructor: { id: string; courseCount: number };
-
-                        if (zeroCourseInstructors.length > 0) {
-                            // Pick a random instructor from those with 0 courses
-                            targetInstructor =
-                                zeroCourseInstructors[
-                                    Math.floor(Math.random() * zeroCourseInstructors.length)
-                                ];
-                        } else {
-                            // 2. Second priority: instructors with the minimum course count to maintain balance
-                            const minCount = Math.min(
-                                ...instructorPool.map((inst) => inst.courseCount),
+                        for (const course of currentInstructor.courses) {
+                            // 1. First priority: instructors with 0 courses assigned
+                            const zeroCourseInstructors = instructorPool.filter(
+                                (inst) => inst.courseCount === 0,
                             );
-                            const minCourseInstructors = instructorPool.filter(
-                                (inst) => inst.courseCount === minCount,
-                            );
-                            targetInstructor =
-                                minCourseInstructors[
-                                    Math.floor(Math.random() * minCourseInstructors.length)
-                                ];
+
+                            let targetInstructor: { id: string; courseCount: number };
+
+                            if (zeroCourseInstructors.length > 0) {
+                                // Pick a random instructor from those with 0 courses
+                                targetInstructor =
+                                    zeroCourseInstructors[
+                                        Math.floor(Math.random() * zeroCourseInstructors.length)
+                                    ];
+                            } else {
+                                // 2. Second priority: instructors with the minimum course count to maintain balance
+                                const minCount = Math.min(
+                                    ...instructorPool.map((inst) => inst.courseCount),
+                                );
+                                const minCourseInstructors = instructorPool.filter(
+                                    (inst) => inst.courseCount === minCount,
+                                );
+                                targetInstructor =
+                                    minCourseInstructors[
+                                        Math.floor(Math.random() * minCourseInstructors.length)
+                                    ];
+                            }
+
+                            // Reassign course to target instructor
+                            await tx.course.update({
+                                where: { id: course.id },
+                                data: { instructorId: targetInstructor.id },
+                            });
+
+                            // Increment local count so subsequent courses remain balanced
+                            targetInstructor.courseCount += 1;
                         }
 
-                        // Reassign course to target instructor
-                        await tx.course.update({
-                            where: { id: course.id },
-                            data: { instructorId: targetInstructor.id },
-                        });
+                        // Reassign nudges in bulk by grouping by instructor to avoid N+1 queries
+                        if (currentInstructor.nudges.length > 0) {
+                            const nudgeBuckets: Record<string, string[]> = {};
+                            for (const nudge of currentInstructor.nudges) {
+                                const randomInstructor =
+                                    instructorPool[
+                                        Math.floor(Math.random() * instructorPool.length)
+                                    ];
+                                if (!nudgeBuckets[randomInstructor.id]) {
+                                    nudgeBuckets[randomInstructor.id] = [];
+                                }
+                                nudgeBuckets[randomInstructor.id].push(nudge.nudgeId);
+                            }
 
-                        // Increment local count so subsequent courses remain balanced
-                        targetInstructor.courseCount += 1;
+                            for (const [targetInstructorId, nudgeIds] of Object.entries(nudgeBuckets)) {
+                                await tx.nudge.updateMany({
+                                    where: { nudgeId: { in: nudgeIds } },
+                                    data: { instructorId: targetInstructorId },
+                                });
+                            }
+                        }
+                    } else {
+                        // If no other instructor exists, clean up relations before deletion
+                        const courseIds = currentInstructor.courses.map((c) => c.id);
+                        if (courseIds.length > 0) {
+                            await tx.enrollment.deleteMany({
+                                where: { courseId: { in: courseIds } },
+                            });
+                            await tx.course.deleteMany({
+                                where: { id: { in: courseIds } },
+                            });
+                        }
+                        await tx.nudge.deleteMany({
+                            where: { instructorId: currentInstructor.id },
+                        });
                     }
 
-                    // Reassign nudges to other instructors
-                    for (const nudge of currentInstructor.nudges) {
-                        const randomInstructor =
-                            instructorPool[
-                                Math.floor(Math.random() * instructorPool.length)
-                            ];
-                        await tx.nudge.update({
-                            where: { nudgeId: nudge.nudgeId },
-                            data: { instructorId: randomInstructor.id },
-                        });
-                    }
-                } else {
-                    // If no other instructor exists, clean up relations before deletion
-                    const courseIds = currentInstructor.courses.map((c) => c.id);
-                    if (courseIds.length > 0) {
-                        await tx.enrollment.deleteMany({
-                            where: { courseId: { in: courseIds } },
-                        });
-                        await tx.course.deleteMany({
-                            where: { id: { in: courseIds } },
-                        });
-                    }
-                    await tx.nudge.deleteMany({
-                        where: { instructorId: currentInstructor.id },
+                    // Delete the instructor record
+                    await tx.instructor.delete({
+                        where: { id: currentInstructor.id },
                     });
-                }
 
-                // Delete the instructor record
-                await tx.instructor.delete({
-                    where: { id: currentInstructor.id },
-                });
-
-                // Delete the user record
-                await tx.user.delete({
-                    where: { id: session.userId },
-                });
-            });
+                    // Delete the user record
+                    await tx.user.delete({
+                        where: { id: session.userId },
+                    });
+                },
+                {
+                    maxWait: 10000,
+                    timeout: 30000,
+                },
+            );
         } else {
             // Delete user record directly if no instructor entity exists
             await prisma.user.delete({

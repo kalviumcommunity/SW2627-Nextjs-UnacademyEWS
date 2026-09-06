@@ -153,7 +153,7 @@ export default async function StudentDetailPage({ params }: PageProps) {
             }
         }
     }
-    let quizScore = Math.min(50, Math.max(0, quizPenalty));
+    const quizScore = Math.min(50, Math.max(0, quizPenalty));
 
     // 3. Compute authentic Total Risk Score & Level
     const totalRiskScore = Math.min(100, Math.max(0, Math.round(loginScore + quizScore)));

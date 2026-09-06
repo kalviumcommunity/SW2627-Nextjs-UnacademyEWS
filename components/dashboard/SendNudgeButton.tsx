@@ -1,10 +1,10 @@
 import Link from "next/link";
 
 export default function SendNudgeButton({
-    studentName,
+    studentName: _studentName,
 }: {
     studentName?: string;
-}) {
+} = {}) {
     return (
         <Link
             href="/dashboard/instructor/nudges"

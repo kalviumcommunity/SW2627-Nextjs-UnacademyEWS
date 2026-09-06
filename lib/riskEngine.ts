@@ -5,6 +5,8 @@ export interface RiskCalculationResult {
   riskScore: number;
   riskLevel: RiskLevel;
   explanation: string;
+  loginScore?: number;
+  quizScore?: number;
 }
 
 /**
@@ -255,6 +257,8 @@ export async function updateStudentRiskScore(
     riskScore: totalRiskScore,
     riskLevel,
     explanation: fullExplanation,
+    loginScore,
+    quizScore,
   };
 }
 
@@ -322,6 +326,23 @@ export async function syncInstructorStudentRisks(instructorId: string): Promise<
       Array.from(studentsToRecalculate).map((studentId) =>
         updateStudentRiskScore(studentId)
       )
+    );
+  }
+}
+
+/**
+ * Synchronizes authentic risk scores for all enrolled students in an instructor's courses.
+ */
+export async function syncAllInstructorStudentRisks(instructorId: string): Promise<void> {
+  const enrollments = await prisma.enrollment.findMany({
+    where: { course: { instructorId } },
+    select: { studentId: true },
+    distinct: ["studentId"],
+  });
+
+  if (enrollments.length > 0) {
+    await Promise.all(
+      enrollments.map((e) => updateStudentRiskScore(e.studentId))
     );
   }
 }

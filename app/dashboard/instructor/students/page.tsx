@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { syncAllInstructorStudentRisks } from "@/lib/riskEngine";
 import { redirect } from "next/navigation";
 import StudentManagementTable, {
     StudentTableItem,
@@ -36,6 +37,9 @@ export default async function InstructorStudentsPage() {
             select: { id: true },
         });
     }
+
+    // Synchronize all enrolled students' risk scores with live activity
+    await syncAllInstructorStudentRisks(instructor.id);
 
     // Fetch instructor courses
     const courses: CourseOption[] = await prisma.course.findMany({

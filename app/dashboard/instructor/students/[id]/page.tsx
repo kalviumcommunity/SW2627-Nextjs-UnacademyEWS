@@ -111,9 +111,12 @@ export default async function StudentDetailPage({ params }: PageProps) {
     const uncompletedCount = Math.max(0, totalAssignedQuizzes - completedCount);
 
     const latestCompletedAttempt = completedAttempts[0];
-    const lastQuizCompletedDate = latestCompletedAttempt?.submittedAt ?? null;
+    let lastQuizCompletedDate = latestCompletedAttempt?.submittedAt ?? null;
+    if (lastLogin && lastQuizCompletedDate && new Date(lastQuizCompletedDate) > new Date(lastLogin)) {
+        lastQuizCompletedDate = lastLogin;
+    }
 
-    // Risk factors and score decomposition
+    // 1. Calculate actual Login Activity Factor (0..50)
     let loginScore = 0;
     if (!lastLogin || daysSinceLastLogin >= 14) {
         loginScore = 50;
@@ -131,10 +134,13 @@ export default async function StudentDetailPage({ params }: PageProps) {
         loginScore = Math.max(0, loginScore - 5);
     }
 
+    // 2. Calculate actual Quiz Activity Factor (0..50)
     let quizPenalty = 0;
+    let missedOverdueCount = 0;
     for (const quiz of assignedQuizzesMap.values()) {
         if (!completedQuizIds.has(quiz.id) && new Date(quiz.dueDate) < now) {
             quizPenalty += 15;
+            missedOverdueCount++;
         }
     }
     for (const attempt of completedAttempts) {
@@ -149,21 +155,37 @@ export default async function StudentDetailPage({ params }: PageProps) {
     }
     let quizScore = Math.min(50, Math.max(0, quizPenalty));
 
-    let totalRiskScore = Math.min(100, Math.max(0, Math.round(loginScore + quizScore)));
+    // 3. Compute authentic Total Risk Score & Level
+    const totalRiskScore = Math.min(100, Math.max(0, Math.round(loginScore + quizScore)));
+    const riskLevel = (totalRiskScore >= 70 ? "HIGH" : totalRiskScore >= 30 ? "MEDIUM" : "LOW") as
+        | "HIGH"
+        | "MEDIUM"
+        | "LOW";
 
-    const latestStoredRisk = student.risks[0];
-    if (latestStoredRisk) {
-        const storedTotal = Math.round(latestStoredRisk.riskScore);
-        if (loginScore + quizScore !== storedTotal) {
-            const sum = loginScore + quizScore || 1;
-            loginScore = Math.min(50, Math.round((loginScore / sum) * storedTotal));
-            quizScore = Math.min(50, storedTotal - loginScore);
-            totalRiskScore = storedTotal;
+    // 4. Persist calculated risk to database so Students Table and Dashboard match
+    const existingRisk = student.risks[0];
+    if (existingRisk) {
+        if (existingRisk.riskScore !== totalRiskScore || existingRisk.riskLevel !== riskLevel) {
+            await prisma.studentRisk.update({
+                where: { riskId: existingRisk.riskId },
+                data: {
+                    riskScore: totalRiskScore,
+                    riskLevel,
+                    calculatedAt: now,
+                },
+            });
         }
+    } else {
+        await prisma.studentRisk.create({
+            data: {
+                studentId: student.id,
+                riskScore: totalRiskScore,
+                riskLevel,
+                explanation: `Login: ${loginScore}/50, Quiz: ${quizScore}/50`,
+                calculatedAt: now,
+            },
+        });
     }
-
-    const riskLevel =
-        totalRiskScore >= 70 ? "HIGH" : totalRiskScore >= 30 ? "MEDIUM" : "LOW";
 
     // Dynamic warning risk factors
     const riskWarnings: string[] = [];
@@ -173,8 +195,17 @@ export default async function StudentDetailPage({ params }: PageProps) {
         riskWarnings.push(`Inactivity alert: ${daysSinceLastLogin} days since last login`);
     }
 
-    if (uncompletedCount > 0) {
-        riskWarnings.push(`${uncompletedCount} out of ${totalAssignedQuizzes} assigned quizzes not completed`);
+    if (missedOverdueCount > 0) {
+        riskWarnings.push(`${missedOverdueCount} missed quiz(zes) past deadline`);
+    } else if (uncompletedCount > 0) {
+        riskWarnings.push(`${uncompletedCount} out of ${totalAssignedQuizzes} assigned quizzes pending`);
+    }
+
+    const lowScoreAttempts = completedAttempts.filter(
+        (a) => a.totalScore > 0 && (a.score / a.totalScore) * 100 < 50
+    );
+    if (lowScoreAttempts.length > 0) {
+        riskWarnings.push(`${lowScoreAttempts.length} quiz(zes) scored below 50% passing threshold`);
     }
 
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);

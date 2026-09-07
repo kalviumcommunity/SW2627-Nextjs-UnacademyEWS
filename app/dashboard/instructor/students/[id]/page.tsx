@@ -105,13 +105,17 @@ export default async function StudentDetailPage({ params }: PageProps) {
     }
     const totalAssignedQuizzes = assignedQuizzesMap.size;
 
-    const completedAttempts = student.quizAttempts.filter((a) => a.completed);
-    const completedQuizIds = new Set(completedAttempts.map((a) => a.quizId));
-    const completedCount = completedQuizIds.size;
+    const isQuizPassed = (a: { completed: boolean; score: number; totalScore: number }) =>
+        a.completed && (a.totalScore > 0 ? a.score / a.totalScore >= 0.6 : a.score >= 0.6);
+
+    const allCompletedSubmissions = student.quizAttempts.filter((a) => a.completed);
+    const passedAttempts = student.quizAttempts.filter(isQuizPassed);
+    const passedQuizIds = new Set(passedAttempts.map((a) => a.quizId));
+    const completedCount = passedQuizIds.size;
     const uncompletedCount = Math.max(0, totalAssignedQuizzes - completedCount);
 
-    const latestCompletedAttempt = completedAttempts[0];
-    let lastQuizCompletedDate = latestCompletedAttempt?.submittedAt ?? null;
+    const latestPassedAttempt = passedAttempts[0];
+    let lastQuizCompletedDate = latestPassedAttempt?.submittedAt ?? null;
     if (lastLogin && lastQuizCompletedDate && new Date(lastQuizCompletedDate) > new Date(lastLogin)) {
         lastQuizCompletedDate = lastLogin;
     }
@@ -138,15 +142,15 @@ export default async function StudentDetailPage({ params }: PageProps) {
     let quizPenalty = 0;
     let missedOverdueCount = 0;
     for (const quiz of assignedQuizzesMap.values()) {
-        if (!completedQuizIds.has(quiz.id) && new Date(quiz.dueDate) < now) {
+        if (!passedQuizIds.has(quiz.id) && new Date(quiz.dueDate) < now) {
             quizPenalty += 15;
             missedOverdueCount++;
         }
     }
-    for (const attempt of completedAttempts) {
+    for (const attempt of allCompletedSubmissions) {
         if (attempt.totalScore > 0) {
             const percentage = (attempt.score / attempt.totalScore) * 100;
-            if (percentage < 50) {
+            if (percentage < 60) {
                 quizPenalty += 15;
             } else if (percentage >= 80) {
                 quizPenalty -= 10;
@@ -201,11 +205,11 @@ export default async function StudentDetailPage({ params }: PageProps) {
         riskWarnings.push(`${uncompletedCount} out of ${totalAssignedQuizzes} assigned quizzes pending`);
     }
 
-    const lowScoreAttempts = completedAttempts.filter(
-        (a) => a.totalScore > 0 && (a.score / a.totalScore) * 100 < 50
+    const lowScoreAttempts = allCompletedSubmissions.filter(
+        (a) => a.totalScore > 0 && (a.score / a.totalScore) * 100 < 60
     );
     if (lowScoreAttempts.length > 0) {
-        riskWarnings.push(`${lowScoreAttempts.length} quiz(zes) scored below 50% passing threshold`);
+        riskWarnings.push(`${lowScoreAttempts.length} quiz(zes) scored below 60% passing threshold`);
     }
 
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);

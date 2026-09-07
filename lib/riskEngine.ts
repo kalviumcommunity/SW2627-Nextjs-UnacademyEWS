@@ -121,7 +121,7 @@ export async function updateStudentRiskScore(
     for (const attempt of quizAttempts) {
       if (attempt.completed && attempt.totalScore > 0) {
         const percentage = (attempt.score / attempt.totalScore) * 100;
-        if (percentage < 50) {
+        if (percentage < 60) {
           lowScoreCount++;
           penalty += 15;
         } else if (percentage >= 80) {
@@ -138,7 +138,7 @@ export async function updateStudentRiskScore(
       explanationParts.push(`${missedCount} missed quiz(zes)`);
     }
     if (lowScoreCount > 0) {
-      explanationParts.push(`${lowScoreCount} quiz score(s) < 50%`);
+      explanationParts.push(`${lowScoreCount} quiz score(s) < 60%`);
     }
     if (highScoreCount > 0) {
       explanationParts.push(`${highScoreCount} quiz score(s) ≥ 80%`);

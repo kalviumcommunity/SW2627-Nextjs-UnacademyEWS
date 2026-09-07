@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { syncAllInstructorStudentRisks } from "@/lib/riskEngine";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -45,6 +46,10 @@ export default async function InstructorDashboardPage() {
             instructorName = user.name || session.name || "Instructor";
             const instructorCourses = user.instructor?.courses || [];
             const courseIds = instructorCourses.map((c) => c.id);
+
+            if (user.instructor?.id) {
+                await syncAllInstructorStudentRisks(user.instructor.id);
+            }
 
             if (courseIds.length > 0) {
                 students = await prisma.student.findMany({

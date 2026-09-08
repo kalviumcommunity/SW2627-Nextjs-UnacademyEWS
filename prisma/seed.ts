@@ -287,13 +287,24 @@ async function main() {
 
       // Add quiz attempts for quizzes in this course
       const courseQuizzes = quizzesToInsert.filter((q) => q.courseId === assignedCourse.id);
-      for (const quiz of courseQuizzes) {
+      for (let qIdx = 0; qIdx < courseQuizzes.length; qIdx++) {
+        const quiz = courseQuizzes[qIdx];
+        let score = 5;
+        if (riskLevel === RiskLevel.LOW) {
+          score = (i + qIdx) % 2 === 0 ? 5 : 4;
+        } else if (riskLevel === RiskLevel.MEDIUM) {
+          const mediumScores = [2, 3, 4, 3];
+          score = mediumScores[(i + qIdx) % mediumScores.length];
+        } else {
+          score = (i + qIdx) % 3 === 0 ? 2 : (i + qIdx) % 3 === 1 ? 1 : 3;
+        }
+
         attemptsToInsert.push({
           id: crypto.randomUUID(),
           studentId,
           quizId: quiz.id,
-          completed: riskLevel !== RiskLevel.HIGH || i % 2 === 0,
-          score: riskLevel === RiskLevel.LOW ? 5 : riskLevel === RiskLevel.MEDIUM ? 2 : 1,
+          completed: score >= 3 || riskLevel !== RiskLevel.HIGH || i % 2 === 0,
+          score,
           totalScore: 5,
           responses: JSON.stringify({ q1: "A", q2: "B" }),
           submittedAt: daysAgo(loginDays[0] ?? 0, 1),

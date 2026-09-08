@@ -72,6 +72,11 @@ export default async function StudentDetailPage({ params }: PageProps) {
                     },
                 },
             },
+            nudges: {
+                where: { instructorId: instructor.id },
+                orderBy: { nudgeId: "desc" },
+                take: 1,
+            },
         },
     });
 
@@ -90,6 +95,7 @@ export default async function StudentDetailPage({ params }: PageProps) {
 
     const studentName = student.user?.name || "Student";
     const lastLogin = student.loginActivities[0]?.loginTime ?? null;
+    const nudgeStatus = (student.nudges[0]?.status ?? "PENDING") as "PENDING" | "SENT" | "NOT_REQUIRED";
     const now = new Date();
 
     const daysSinceLastLogin = lastLogin
@@ -310,7 +316,12 @@ export default async function StudentDetailPage({ params }: PageProps) {
 
             {/* Action Button */}
             <div className="pt-2">
-                <SendNudgeButton studentName={studentName} />
+                <SendNudgeButton
+                    studentId={student.id}
+                    studentName={studentName}
+                    riskLevel={riskLevel}
+                    nudgeStatus={nudgeStatus}
+                />
             </div>
         </div>
     );

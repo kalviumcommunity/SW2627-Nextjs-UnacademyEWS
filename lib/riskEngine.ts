@@ -204,18 +204,21 @@ export async function updateStudentRiskScore(
 
   // -------------------------------------------------------------
   // 5. SYNCHRONIZE NUDGE STATUS WITH RISK LEVEL
-  // Rule: LOW risk => ONLY NOT_REQUIRED
-  //       MEDIUM / HIGH risk => PENDING or SENT (never NOT_REQUIRED)
+  // Rule: LOW risk => PENDING/NOT_REQUIRED becomes NOT_REQUIRED (SENT remains untouched for history)
+  //       MEDIUM / HIGH risk => PENDING (creates/resets PENDING for outreach)
   // -------------------------------------------------------------
   if (riskLevel === RiskLevel.LOW) {
     await prisma.nudge.updateMany({
-      where: { studentId },
+      where: {
+        studentId,
+        status: { not: NudgeStatus.SENT },
+      },
       data: {
         status: NudgeStatus.NOT_REQUIRED,
-        sentAt: null,
       },
     });
   } else {
+    // If risk is MEDIUM or HIGH, reset any NOT_REQUIRED nudges to PENDING
     await prisma.nudge.updateMany({
       where: {
         studentId,
@@ -226,21 +229,27 @@ export async function updateStudentRiskScore(
       },
     });
 
-    // If no nudge exists yet for their instructors, create one with status PENDING
+    // Ensure each course instructor has an active PENDING/SENT nudge record
     const studentCourses = await prisma.course.findMany({
       where: { id: { in: enrolledCourseIds } },
       select: { instructorId: true },
     });
 
-    const instructorIds = studentCourses
-      .map((c) => c.instructorId)
-      .filter((id): id is string => Boolean(id));
+    const instructorIds = Array.from(
+      new Set(
+        studentCourses
+          .map((c) => c.instructorId)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
 
     for (const instructorId of instructorIds) {
-      const existing = await prisma.nudge.findFirst({
+      const latestNudge = await prisma.nudge.findFirst({
         where: { studentId, instructorId },
+        orderBy: [{ sentAt: "desc" }, { nudgeId: "desc" }],
       });
-      if (!existing) {
+
+      if (!latestNudge) {
         await prisma.nudge.create({
           data: {
             studentId,

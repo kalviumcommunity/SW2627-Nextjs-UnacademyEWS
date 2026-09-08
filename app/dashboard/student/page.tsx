@@ -2,6 +2,8 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 
+import { getQuizStatus, isQuizPassed, QuizStatus } from "@/lib/quizStatus";
+
 export default async function StudentDashboardPage() {
     const session = await getSession();
 
@@ -42,17 +44,6 @@ export default async function StudentDashboardPage() {
 
     const studentName = user.name || session.name || "Student";
 
-    // Helper to check if a student passed and completed a quiz (score >= 60%)
-    const isQuizPassedAndCompleted = (attempt?: {
-        completed: boolean;
-        score: number;
-        totalScore: number;
-    } | null) => {
-        if (!attempt || !attempt.completed) return false;
-        const total = attempt.totalScore > 0 ? attempt.totalScore : 1;
-        return attempt.score / total >= 0.6;
-    };
-
     // 1. Process My Courses
     const enrolledCourses = user.student.enrollments.map((enrollment) => {
         const course = enrollment.course;
@@ -61,7 +52,7 @@ export default async function StudentDashboardPage() {
             const attempt = user.student?.quizAttempts.find(
                 (a) => a.quizId === quiz.id,
             );
-            return isQuizPassedAndCompleted(attempt);
+            return isQuizPassed(attempt);
         }).length;
 
         const progressPercentage =
@@ -83,32 +74,17 @@ export default async function StudentDashboardPage() {
         courseName: string;
         dueDate: Date;
         formattedDueDate: string;
-        status: "Completed" | "Pending" | "Not Attempted";
+        status: QuizStatus;
     }
 
     const allQuizzes: QuizItem[] = [];
-    const now = new Date();
 
     for (const enrollment of user.student.enrollments) {
         for (const quiz of enrollment.course.quizzes) {
             const attempt = user.student.quizAttempts.find(
                 (a) => a.quizId === quiz.id,
             );
-            const hasAttempted = Boolean(attempt);
-            const hasPassed = isQuizPassedAndCompleted(attempt);
-            const isExpired = new Date(quiz.dueDate).getTime() <= now.getTime();
-
-            let status: "Completed" | "Pending" | "Not Attempted";
-
-            if (hasPassed) {
-                status = "Completed";
-            } else if (hasAttempted && !isExpired) {
-                // Not expired, attempted but not cleared with 60% or more score
-                status = "Pending";
-            } else {
-                // Due date passed and never attempted, or unattempted
-                status = "Not Attempted";
-            }
+            const status = getQuizStatus(quiz.dueDate, attempt);
 
             allQuizzes.push({
                 id: quiz.id,

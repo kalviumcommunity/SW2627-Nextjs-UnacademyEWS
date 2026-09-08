@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { TriangleAlert, CheckCircle2 } from "lucide-react";
 import SendNudgeButton from "@/components/dashboard/SendNudgeButton";
+import { isQuizPassed } from "@/lib/quizStatus";
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -110,9 +111,6 @@ export default async function StudentDetailPage({ params }: PageProps) {
         }
     }
     const totalAssignedQuizzes = assignedQuizzesMap.size;
-
-    const isQuizPassed = (a: { completed: boolean; score: number; totalScore: number }) =>
-        a.completed && (a.totalScore > 0 ? a.score / a.totalScore >= 0.6 : a.score >= 0.6);
 
     const allCompletedSubmissions = student.quizAttempts.filter((a) => a.completed);
     const passedAttempts = student.quizAttempts.filter(isQuizPassed);

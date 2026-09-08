@@ -141,12 +141,12 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
                                                 })}
                                             </td>
                                             <td className="px-6 py-4 text-right whitespace-nowrap">
-                                                <button
-                                                    type="button"
+                                                <Link
+                                                    href={`/dashboard/instructor/courses/${id}/quizzes/${quiz.id}`}
                                                     className="text-sm font-medium text-zinc-700 hover:text-zinc-950 hover:underline transition-colors cursor-pointer"
                                                 >
                                                     View
-                                                </button>
+                                                </Link>
                                             </td>
                                         </tr>
                                     ))}

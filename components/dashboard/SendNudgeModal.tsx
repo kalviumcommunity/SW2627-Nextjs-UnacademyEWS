@@ -46,22 +46,24 @@ export default function SendNudgeModal({
   studentName,
   riskLevel,
 }: SendNudgeModalProps) {
-  const [message, setMessage] = useState("");
+  const firstName = studentName.trim().split(" ")[0] || "Student";
+  const defaultText = TEMPLATE_DEFINITIONS[0].getMessage(firstName);
+
+  const [message, setMessage] = useState(defaultText);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const firstName = studentName.trim().split(" ")[0] || "Student";
-
-  // Reset modal state dynamically whenever modal opens or recipient changes
-  useEffect(() => {
+  // Reset modal state during render when modal opens or target student changes
+  const [prevOpenState, setPrevOpenState] = useState({ isOpen: false, studentId: "" });
+  if (prevOpenState.isOpen !== isOpen || prevOpenState.studentId !== studentId) {
+    setPrevOpenState({ isOpen, studentId });
     if (isOpen) {
-      const defaultText = TEMPLATE_DEFINITIONS[0].getMessage(firstName);
       setMessage(defaultText);
       setError(null);
       setSuccess(null);
     }
-  }, [isOpen, firstName, studentId]);
+  }
 
   // ESC key dismissal handler
   useEffect(() => {

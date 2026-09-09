@@ -138,29 +138,20 @@ export default function StudentQuizzesTable({ quizzes }: StudentQuizzesTableProp
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                {quiz.status === "Pending" && (
-                                                    <Link
-                                                        href={`/dashboard/student/quizzes/${quiz.id}`}
-                                                        className="inline-flex items-center justify-center bg-[#18181b] hover:bg-zinc-800 active:bg-zinc-950 text-white text-xs sm:text-sm font-medium px-4 py-1.5 rounded-md shadow-xs transition-colors"
-                                                    >
-                                                        Start Quiz
-                                                    </Link>
-                                                )}
-
-                                                {quiz.status === "Completed" && (
+                                                {quiz.status === "Completed" ? (
                                                     <Link
                                                         href={`/dashboard/student/quizzes/${quiz.id}`}
                                                         className="inline-flex items-center justify-center bg-white hover:bg-zinc-50 active:bg-zinc-100 border border-zinc-300 text-zinc-800 text-xs sm:text-sm font-medium px-4 py-1.5 rounded-md shadow-2xs transition-colors"
                                                     >
                                                         Review
                                                     </Link>
-                                                )}
-
-                                                {(quiz.status === "Not Completed" ||
-                                                    quiz.status === "Not Attempted") && (
-                                                    <span className="text-zinc-500 text-base font-normal select-none">
-                                                        —
-                                                    </span>
+                                                ) : (
+                                                    <Link
+                                                        href={`/dashboard/student/quizzes/${quiz.id}`}
+                                                        className="inline-flex items-center justify-center bg-[#18181b] hover:bg-zinc-800 active:bg-zinc-950 text-white text-xs sm:text-sm font-medium px-4 py-1.5 rounded-md shadow-xs transition-colors"
+                                                    >
+                                                        Start Quiz
+                                                    </Link>
                                                 )}
                                             </td>
                                         </tr>

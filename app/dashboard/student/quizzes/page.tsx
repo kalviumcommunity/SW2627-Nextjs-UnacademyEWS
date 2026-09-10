@@ -6,7 +6,14 @@ import StudentQuizzesTable, {
     StudentQuizItem,
 } from "@/components/student/StudentQuizzesTable";
 
-export default async function StudentQuizzesPage() {
+import { AlertCircle } from "lucide-react";
+
+interface StudentQuizzesPageProps {
+    searchParams?: Promise<{ error?: string }>;
+}
+
+export default async function StudentQuizzesPage({ searchParams }: StudentQuizzesPageProps) {
+    const params = await searchParams;
     const session = await getSession();
 
     if (!session) {
@@ -68,6 +75,9 @@ export default async function StudentQuizzesPage() {
                     year: "numeric",
                 }),
                 status,
+                hasAttempt: Boolean(attempt),
+                score: attempt?.score,
+                totalScore: attempt?.totalScore,
             });
         }
     }
@@ -83,6 +93,16 @@ export default async function StudentQuizzesPage() {
                     View and complete your assigned quizzes
                 </p>
             </div>
+
+            {/* Notification Banner */}
+            {params?.error === "not_enrolled" && (
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-red-50 border border-red-200 text-red-900 text-sm">
+                    <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                    <div>
+                        <span className="font-semibold">Access Denied:</span> You must be enrolled in the course to take this quiz.
+                    </div>
+                </div>
+            )}
 
             {/* Quizzes Table with Filter Tabs */}
             <StudentQuizzesTable quizzes={allQuizzes} />

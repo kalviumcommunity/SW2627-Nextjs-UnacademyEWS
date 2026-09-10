@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { TriangleAlert, CheckCircle2 } from "lucide-react";
 import SendNudgeButton from "@/components/dashboard/SendNudgeButton";
-import { isQuizPassed } from "@/lib/quizStatus";
+import { isQuizPassed, getQuizStatus } from "@/lib/quizStatus";
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -112,11 +112,7 @@ export default async function StudentDetailPage({ params }: PageProps) {
     }
     const totalAssignedQuizzes = assignedQuizzesMap.size;
 
-    const allCompletedSubmissions = student.quizAttempts.filter((a) => a.completed);
     const passedAttempts = student.quizAttempts.filter(isQuizPassed);
-    const passedQuizIds = new Set(passedAttempts.map((a) => a.quizId));
-    const completedCount = passedQuizIds.size;
-    const uncompletedCount = Math.max(0, totalAssignedQuizzes - completedCount);
 
     const latestPassedAttempt = passedAttempts[0];
     let lastQuizCompletedDate = latestPassedAttempt?.submittedAt ?? null;
@@ -143,21 +139,39 @@ export default async function StudentDetailPage({ params }: PageProps) {
     }
 
     // 2. Calculate actual Quiz Activity Factor (0..50)
-    let quizPenalty = 0;
-    let missedOverdueCount = 0;
-    for (const quiz of assignedQuizzesMap.values()) {
-        if (!passedQuizIds.has(quiz.id) && new Date(quiz.dueDate) < now) {
-            quizPenalty += 15;
-            missedOverdueCount++;
+    // Deduplicate attempts by quizId: only consider the student's latest attempt per quiz
+    const latestAttemptByQuizId = new Map<string, (typeof student.quizAttempts)[0]>();
+    for (const attempt of student.quizAttempts) {
+        if (!latestAttemptByQuizId.has(attempt.quizId)) {
+            latestAttemptByQuizId.set(attempt.quizId, attempt);
         }
     }
-    for (const attempt of allCompletedSubmissions) {
-        if (attempt.totalScore > 0) {
-            const percentage = (attempt.score / attempt.totalScore) * 100;
-            if (percentage < 60) {
-                quizPenalty += 15;
-            } else if (percentage >= 80) {
+
+    let quizPenalty = 0;
+    let completedCount = 0;
+    let pendingCount = 0;
+    let notCompletedCount = 0;
+    let notAttemptedCount = 0;
+
+    for (const quiz of assignedQuizzesMap.values()) {
+        const latestAttempt = latestAttemptByQuizId.get(quiz.id);
+        const status = getQuizStatus(quiz.dueDate, latestAttempt, now);
+
+        if (status === "Completed") {
+            completedCount++;
+            if (latestAttempt && latestAttempt.totalScore > 0 && (latestAttempt.score / latestAttempt.totalScore) >= 0.8) {
                 quizPenalty -= 10;
+            }
+        } else if (status === "Not Attempted") {
+            notAttemptedCount++;
+            quizPenalty += 15;
+        } else if (status === "Not Completed") {
+            notCompletedCount++;
+            quizPenalty += 15;
+        } else if (status === "Pending") {
+            pendingCount++;
+            if (latestAttempt && latestAttempt.totalScore > 0 && (latestAttempt.score / latestAttempt.totalScore) < 0.6) {
+                quizPenalty += 15;
             }
         }
     }
@@ -195,25 +209,55 @@ export default async function StudentDetailPage({ params }: PageProps) {
         });
     }
 
-    // Dynamic warning risk factors
-    const riskWarnings: string[] = [];
+    // Dynamic warning risk factors with only the status words highlighted
+    interface RiskWarningItem {
+        countText?: string;
+        statusText: string;
+        description?: string;
+        statusColorClass: string;
+    }
+
+    const riskWarnings: RiskWarningItem[] = [];
+
     if (daysSinceLastLogin >= 7) {
-        riskWarnings.push(`No login for ${daysSinceLastLogin} days (threshold: 7 days)`);
+        riskWarnings.push({
+            statusText: `No login for ${daysSinceLastLogin} days`,
+            description: "(threshold: 7 days)",
+            statusColorClass: "text-zinc-900",
+        });
     } else if (daysSinceLastLogin >= 5) {
-        riskWarnings.push(`Inactivity alert: ${daysSinceLastLogin} days since last login`);
+        riskWarnings.push({
+            statusText: `Inactivity alert: ${daysSinceLastLogin} days since last login`,
+            description: "(approaching 7 days threshold)",
+            statusColorClass: "text-zinc-900",
+        });
     }
 
-    if (missedOverdueCount > 0) {
-        riskWarnings.push(`${missedOverdueCount} missed quiz(zes) past deadline`);
-    } else if (uncompletedCount > 0) {
-        riskWarnings.push(`${uncompletedCount} out of ${totalAssignedQuizzes} assigned quizzes pending`);
+    if (notAttemptedCount > 0) {
+        riskWarnings.push({
+            countText: `${notAttemptedCount} quiz(zes)`,
+            statusText: "Not Attempted",
+            description: "(past deadline; never attempted)",
+            statusColorClass: "text-zinc-700",
+        });
     }
 
-    const lowScoreAttempts = allCompletedSubmissions.filter(
-        (a) => a.totalScore > 0 && (a.score / a.totalScore) * 100 < 60
-    );
-    if (lowScoreAttempts.length > 0) {
-        riskWarnings.push(`${lowScoreAttempts.length} quiz(zes) scored below 60% passing threshold`);
+    if (notCompletedCount > 0) {
+        riskWarnings.push({
+            countText: `${notCompletedCount} quiz(zes)`,
+            statusText: "Not Completed",
+            description: "(past deadline; attempted with score < 60%)",
+            statusColorClass: "text-orange-700",
+        });
+    }
+
+    if (pendingCount > 0) {
+        riskWarnings.push({
+            countText: `${pendingCount} quiz(zes)`,
+            statusText: "Pending",
+            description: "(before deadline; awaiting attempt or score ≥ 60%)",
+            statusColorClass: "text-amber-700",
+        });
     }
 
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
@@ -222,7 +266,10 @@ export default async function StudentDetailPage({ params }: PageProps) {
     ).length;
 
     if ((riskLevel === "HIGH" || riskLevel === "MEDIUM") && loginsPast14Days <= 3) {
-        riskWarnings.push("Declining login frequency over past 14 days");
+        riskWarnings.push({
+            statusText: "Declining login frequency over past 14 days",
+            statusColorClass: "text-zinc-900",
+        });
     }
 
     return (
@@ -290,11 +337,17 @@ export default async function StudentDetailPage({ params }: PageProps) {
                 <h2 className="text-sm font-bold text-zinc-900">Risk Factors</h2>
                 
                 {riskWarnings.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                         {riskWarnings.map((warning, index) => (
-                            <div key={index} className="flex items-start gap-2.5 text-sm text-zinc-800 font-medium">
+                            <div key={index} className="flex items-start gap-2.5 text-sm">
                                 <TriangleAlert className="w-4 h-4 text-zinc-800 shrink-0 mt-0.5" />
-                                <span>{warning}</span>
+                                <p className="text-zinc-800">
+                                    {warning.countText && <span>{warning.countText} </span>}
+                                    <span className={`font-semibold ${warning.statusColorClass}`}>{warning.statusText}</span>
+                                    {warning.description && (
+                                        <span className="text-zinc-500 font-normal"> {warning.description}</span>
+                                    )}
+                                </p>
                             </div>
                         ))}
                     </div>

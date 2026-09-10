@@ -11,6 +11,9 @@ export interface StudentQuizItem {
     dueDate: string;
     formattedDueDate: string;
     status: QuizStatus;
+    hasAttempt?: boolean;
+    score?: number;
+    totalScore?: number;
 }
 
 interface StudentQuizzesTableProps {
@@ -140,7 +143,7 @@ export default function StudentQuizzesTable({ quizzes }: StudentQuizzesTableProp
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {quiz.status === "Completed" ? (
                                                     <Link
-                                                        href={`/dashboard/student/quizzes/${quiz.id}`}
+                                                        href={`/dashboard/student/quizzes/${quiz.id}?mode=review`}
                                                         className="inline-flex items-center justify-center bg-white hover:bg-zinc-50 active:bg-zinc-100 border border-zinc-300 text-zinc-800 text-xs sm:text-sm font-medium px-4 py-1.5 rounded-md shadow-2xs transition-colors"
                                                     >
                                                         Review
@@ -150,7 +153,7 @@ export default function StudentQuizzesTable({ quizzes }: StudentQuizzesTableProp
                                                         href={`/dashboard/student/quizzes/${quiz.id}`}
                                                         className="inline-flex items-center justify-center bg-[#18181b] hover:bg-zinc-800 active:bg-zinc-950 text-white text-xs sm:text-sm font-medium px-4 py-1.5 rounded-md shadow-xs transition-colors"
                                                     >
-                                                        Start Quiz
+                                                        {quiz.hasAttempt ? "Retake Quiz" : "Start Quiz"}
                                                     </Link>
                                                 )}
                                             </td>

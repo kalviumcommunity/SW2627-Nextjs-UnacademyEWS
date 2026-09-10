@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { RiskLevel, NudgeStatus } from "@/app/generated/prisma/client";
+import { getQuizStatus } from "@/lib/quizStatus";
 
 export interface RiskCalculationResult {
   riskScore: number;
@@ -74,9 +75,6 @@ export async function updateStudentRiskScore(
   });
 
   const enrolledCourseIds = enrollments.map((e) => e.courseId);
-  const enrollmentDateMap = new Map<string, Date>(
-    enrollments.map((e) => [e.courseId, e.enrollmentDate])
-  );
 
   const assignedQuizzes = enrolledCourseIds.length > 0
     ? await prisma.quiz.findMany({
@@ -87,6 +85,7 @@ export async function updateStudentRiskScore(
   const quizAttempts = await prisma.quizAttempt.findMany({
     where: { studentId },
     include: { quiz: true },
+    orderBy: { submittedAt: "desc" },
   });
 
   let quizScore = 0;
@@ -97,36 +96,38 @@ export async function updateStudentRiskScore(
     quizExplanation = "No quizzes assigned yet.";
   } else {
     let penalty = 0;
-    let missedCount = 0;
-    let lowScoreCount = 0;
-    let highScoreCount = 0;
-
-    const attemptedQuizIds = new Set<string>(
-      quizAttempts
-        .filter((attempt) => attempt.completed)
-        .map((attempt) => attempt.quizId)
-    );
-
-    for (const quiz of assignedQuizzes) {
-      const enrollmentDate = enrollmentDateMap.get(quiz.courseId);
-      // Only count as missed if the quiz was due AFTER the student enrolled and has now passed
-      const isDueAfterEnrollment = enrollmentDate ? quiz.dueDate >= enrollmentDate : true;
-
-      if (!attemptedQuizIds.has(quiz.id) && quiz.dueDate < now && isDueAfterEnrollment) {
-        missedCount++;
-        penalty += 15;
+    // Deduplicate attempts by quizId: only consider the student's latest attempt per quiz
+    const latestAttemptByQuizId = new Map<string, typeof quizAttempts[0]>();
+    for (const attempt of quizAttempts) {
+      if (!latestAttemptByQuizId.has(attempt.quizId)) {
+        latestAttemptByQuizId.set(attempt.quizId, attempt);
       }
     }
 
-    for (const attempt of quizAttempts) {
-      if (attempt.completed && attempt.totalScore > 0) {
-        const percentage = (attempt.score / attempt.totalScore) * 100;
-        if (percentage < 60) {
-          lowScoreCount++;
-          penalty += 15;
-        } else if (percentage >= 80) {
-          highScoreCount++;
+    let completedCount = 0;
+    let pendingCount = 0;
+    let notCompletedCount = 0;
+    let notAttemptedCount = 0;
+
+    for (const quiz of assignedQuizzes) {
+      const latestAttempt = latestAttemptByQuizId.get(quiz.id);
+      const status = getQuizStatus(quiz.dueDate, latestAttempt, now);
+
+      if (status === "Completed") {
+        completedCount++;
+        if (latestAttempt && latestAttempt.totalScore > 0 && (latestAttempt.score / latestAttempt.totalScore) >= 0.8) {
           penalty -= 10;
+        }
+      } else if (status === "Not Attempted") {
+        notAttemptedCount++;
+        penalty += 15;
+      } else if (status === "Not Completed") {
+        notCompletedCount++;
+        penalty += 15;
+      } else if (status === "Pending") {
+        pendingCount++;
+        if (latestAttempt && latestAttempt.totalScore > 0 && (latestAttempt.score / latestAttempt.totalScore) < 0.6) {
+          penalty += 15;
         }
       }
     }
@@ -134,14 +135,17 @@ export async function updateStudentRiskScore(
     quizScore = Math.min(50, Math.max(0, penalty));
 
     const explanationParts: string[] = [];
-    if (missedCount > 0) {
-      explanationParts.push(`${missedCount} missed quiz(zes)`);
+    if (notAttemptedCount > 0) {
+      explanationParts.push(`${notAttemptedCount} Not Attempted (past deadline; never attempted)`);
     }
-    if (lowScoreCount > 0) {
-      explanationParts.push(`${lowScoreCount} quiz score(s) < 60%`);
+    if (notCompletedCount > 0) {
+      explanationParts.push(`${notCompletedCount} Not Completed (past deadline; score < 60%)`);
     }
-    if (highScoreCount > 0) {
-      explanationParts.push(`${highScoreCount} quiz score(s) ≥ 80%`);
+    if (pendingCount > 0) {
+      explanationParts.push(`${pendingCount} Pending (before deadline; awaiting attempt or score ≥ 60%)`);
+    }
+    if (completedCount > 0) {
+      explanationParts.push(`${completedCount} Completed (passed with score ≥ 60%)`);
     }
 
     if (explanationParts.length > 0) {

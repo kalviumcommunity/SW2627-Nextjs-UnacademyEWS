@@ -3,11 +3,30 @@ import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getCourseContent } from "@/lib/courseContent";
-import { isQuizPassed } from "@/lib/quizStatus";
+import { getQuizStatus, QuizStatus } from "@/lib/quizStatus";
 
 interface CourseDetailPageProps {
     params: Promise<{ id: string }>;
 }
+
+const STATUS_CONFIG: Record<QuizStatus, { label: string; className: string }> = {
+    Completed: {
+        label: "Completed",
+        className: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    },
+    Pending: {
+        label: "Pending",
+        className: "bg-amber-50 text-amber-700 border border-amber-200",
+    },
+    "Not Completed": {
+        label: "Not Completed",
+        className: "bg-orange-50 text-orange-700 border border-orange-200",
+    },
+    "Not Attempted": {
+        label: "Not Attempted",
+        className: "bg-zinc-100 text-zinc-600 border border-zinc-200",
+    },
+};
 
 export default async function StudentCourseDetailPage({
     params,
@@ -134,9 +153,9 @@ export default async function StudentCourseDetailPage({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {course.quizzes.map((quiz, index) => {
                                 const latestAttempt = quiz.attempts[0];
-                                const isCompleted =
-                                    isQuizPassed(latestAttempt) ||
-                                    Boolean(latestAttempt?.completed);
+                                const status = getQuizStatus(quiz.dueDate, latestAttempt);
+                                const badge = STATUS_CONFIG[status] || STATUS_CONFIG["Not Attempted"];
+                                const isCompleted = status === "Completed";
 
                                 const cleanTitle = quiz.quizTitle.replace(/^of\s+/i, "");
                                 const displayQuizTitle = cleanTitle.startsWith("Quiz ")
@@ -153,15 +172,11 @@ export default async function StudentCourseDetailPage({
                                         </h3>
 
                                         <div className="flex items-center justify-between mt-6 gap-2">
-                                            {isCompleted ? (
-                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#18181b] text-white">
-                                                    Completed
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border border-zinc-200 bg-white text-zinc-600">
-                                                    Pending
-                                                </span>
-                                            )}
+                                            <span
+                                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.className}`}
+                                            >
+                                                {badge.label}
+                                            </span>
 
                                             {isCompleted ? (
                                                 <Link

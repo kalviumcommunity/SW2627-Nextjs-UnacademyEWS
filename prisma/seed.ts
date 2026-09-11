@@ -6,6 +6,7 @@ import { PrismaClient } from "../app/generated/prisma/client";
 import { Role, RiskLevel, NudgeStatus } from "../app/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { getQuizQuestions } from "../lib/quizQuestions.js";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL!,
@@ -126,11 +127,16 @@ async function main() {
   }> = [];
 
   for (const course of courseData) {
-    const courseShort = course.courseName.split(" ")[1] || "Technical";
+    const cleanTopic = course.courseName
+      .replace(/^(Advanced|Applied|Core|Modern|Mastering|Fundamentals of)\s+/i, "")
+      .replace(/\s+with\s+.*/i, "")
+      .replace(/\s+&\s+.*/i, "")
+      .trim() || "Technical";
+
     quizzesToInsert.push({
       id: crypto.randomUUID(),
       courseId: course.id,
-      quizTitle: `${courseShort} Mid-Term Assessment`,
+      quizTitle: `${cleanTopic} Mid-Term Assessment`,
       dueDate: daysAgo(5),
       questionsCount: 5,
     });
@@ -138,7 +144,7 @@ async function main() {
     quizzesToInsert.push({
       id: crypto.randomUUID(),
       courseId: course.id,
-      quizTitle: `${courseShort} Practical Milestone Evaluation`,
+      quizTitle: `${cleanTopic} Practical Milestone Evaluation`,
       dueDate: daysAgo(-7),
       questionsCount: 5,
     });
@@ -299,14 +305,29 @@ async function main() {
           score = (i + qIdx) % 3 === 0 ? 2 : (i + qIdx) % 3 === 1 ? 1 : 3;
         }
 
+        const questions = getQuizQuestions(quiz.quizTitle, assignedCourse.courseName, 5);
+        const detailedResponses: Record<string, { selected: string; correct: string; isCorrect: boolean }> = {};
+        for (let qNum = 0; qNum < questions.length; qNum++) {
+          const q = questions[qNum];
+          const isCorrect = qNum < score;
+          const selected = isCorrect
+            ? q.correctAnswer
+            : q.options.find((o) => o !== q.correctAnswer) || q.options[0];
+          detailedResponses[q.id] = {
+            selected,
+            correct: q.correctAnswer,
+            isCorrect,
+          };
+        }
+
         attemptsToInsert.push({
           id: crypto.randomUUID(),
           studentId,
           quizId: quiz.id,
-          completed: score >= 3 || riskLevel !== RiskLevel.HIGH || i % 2 === 0,
+          completed: score >= 3,
           score,
           totalScore: 5,
-          responses: JSON.stringify({ q1: "A", q2: "B" }),
+          responses: JSON.stringify(detailedResponses),
           submittedAt: daysAgo(loginDays[0] ?? 0, 1),
         });
       }

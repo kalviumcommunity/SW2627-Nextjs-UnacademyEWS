@@ -50,20 +50,26 @@ function extractPreviousAnswers(
         }
     }
 
-    if (parsed && typeof parsed === "object") {
+    if (parsed && typeof parsed === "object" && parsed !== null) {
         const record = parsed as Record<string, unknown>;
+        const recordEntries = Object.entries(record);
+
         questions.forEach((q, idx) => {
-            const val = record[q.id] ?? record[idx] ?? record[`q${idx + 1}`];
+            let val = record[q.id] ?? record[idx] ?? record[`q${idx + 1}`];
+            if (val === undefined && recordEntries[idx]) {
+                val = recordEntries[idx][1];
+            }
+
             if (typeof val === "object" && val !== null && "selected" in val) {
                 const selectedVal = (val as { selected?: unknown }).selected;
-                if (typeof selectedVal === "string") {
+                if (typeof selectedVal === "string" && selectedVal.trim() !== "") {
                     result[idx] = selectedVal;
                 }
-            } else if (typeof val === "string") {
+            } else if (typeof val === "string" && val.trim() !== "") {
                 if (q.options.includes(val)) {
                     result[idx] = val;
-                } else if (val === "A" || val === "B" || val === "C" || val === "D") {
-                    const letterIdx = ["A", "B", "C", "D"].indexOf(val);
+                } else if (["A", "B", "C", "D"].includes(val.toUpperCase())) {
+                    const letterIdx = ["A", "B", "C", "D"].indexOf(val.toUpperCase());
                     result[idx] = q.options[letterIdx] || q.options[0];
                 } else {
                     result[idx] = val;
@@ -72,15 +78,35 @@ function extractPreviousAnswers(
         });
     }
 
-    // If no responses were saved or parsed (e.g. initial seed data before quiz taking was built),
-    // reconstruct answers matching the actual score recorded:
-    if (Object.keys(result).length === 0) {
-        const targetCorrect = Math.min(questions.length, Math.max(0, Math.round(score ?? 0)));
+    // Ensure all questions have a valid answer and the count of correct answers exactly matches recorded score
+    const targetScore = Math.min(
+        questions.length,
+        Math.max(0, Math.round(score ?? 0))
+    );
+
+    let actualCorrect = 0;
+    questions.forEach((q, idx) => {
+        if (
+            result[idx] &&
+            result[idx].trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()
+        ) {
+            actualCorrect += 1;
+        }
+    });
+
+    // If answers are incomplete or if actual correct count does not match the attempt score:
+    const isComplete = Object.keys(result).length === questions.length;
+    if (!isComplete || actualCorrect !== targetScore) {
         questions.forEach((q, idx) => {
-            if (idx < targetCorrect) {
+            if (idx < targetScore) {
                 result[idx] = q.correctAnswer;
             } else {
-                const wrongOption = q.options.find((o) => o !== q.correctAnswer) || q.options[0];
+                const wrongOption =
+                    q.options.find(
+                        (o) =>
+                            o.trim().toLowerCase() !==
+                            q.correctAnswer.trim().toLowerCase()
+                    ) || q.options[0];
                 result[idx] = wrongOption;
             }
         });

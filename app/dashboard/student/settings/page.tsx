@@ -1,5 +1,7 @@
 import { getSession } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import StudentSettingsForm from "@/components/student/StudentSettingsForm";
 
 export default async function StudentSettingsPage() {
     const session = await getSession();
@@ -12,11 +14,19 @@ export default async function StudentSettingsPage() {
         redirect("/dashboard/instructor");
     }
 
-    return (
-        <div className="p-8 sm:p-10 max-w-7xl mx-auto space-y-6">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900">
-                Settings
-            </h1>
-        </div>
-    );
+    const user = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: {
+            id: true,
+            name: true,
+            email: true,
+        },
+    });
+
+    if (!user) {
+        redirect("/login");
+    }
+
+    return <StudentSettingsForm initialUser={user} />;
 }
+

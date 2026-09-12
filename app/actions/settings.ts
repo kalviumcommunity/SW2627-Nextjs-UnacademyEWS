@@ -271,3 +271,183 @@ export async function deleteInstructorAccount() {
     await deleteSession();
     redirect("/register");
 }
+
+export async function updateStudentProfile(_previousState: unknown, formData: FormData) {
+    const session = await getSession();
+
+    if (!session || session.role !== "STUDENT") {
+        return {
+            success: false,
+            error: "Unauthorized. Student access required.",
+        };
+    }
+
+    const rawName = formData.get("name");
+    const result = updateProfileSchema.safeParse({
+        name: typeof rawName === "string" ? rawName : "",
+    });
+
+    if (!result.success) {
+        return {
+            success: false,
+            errors: result.error.flatten().fieldErrors,
+        };
+    }
+
+    const { name } = result.data;
+
+    try {
+        const updatedUser = await prisma.user.update({
+            where: { id: session.userId },
+            data: { name },
+        });
+
+        // Update active session cookie with updated name
+        await createSession({
+            id: updatedUser.id,
+            role: updatedUser.role,
+            name: updatedUser.name,
+        });
+
+        revalidatePath("/dashboard/student/settings");
+        revalidatePath("/dashboard/student");
+
+        return {
+            success: true,
+            message: "Profile updated successfully.",
+            name: updatedUser.name,
+        };
+    } catch (error) {
+        console.error("Failed to update student profile:", error);
+        return {
+            success: false,
+            error: "Failed to update profile. Please try again.",
+        };
+    }
+}
+
+export async function changeStudentPassword(_previousState: unknown, formData: FormData) {
+    const session = await getSession();
+
+    if (!session || session.role !== "STUDENT") {
+        return {
+            success: false,
+            error: "Unauthorized. Student access required.",
+        };
+    }
+
+    const currentPassword = formData.get("currentPassword");
+    const newPassword = formData.get("newPassword");
+
+    const result = changePasswordSchema.safeParse({
+        currentPassword: typeof currentPassword === "string" ? currentPassword : "",
+        newPassword: typeof newPassword === "string" ? newPassword : "",
+    });
+
+    if (!result.success) {
+        return {
+            success: false,
+            errors: result.error.flatten().fieldErrors,
+        };
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+        });
+
+        if (!user) {
+            return {
+                success: false,
+                error: "User account not found.",
+            };
+        }
+
+        const passwordMatches = await bcrypt.compare(
+            result.data.currentPassword,
+            user.passwordHash,
+        );
+
+        if (!passwordMatches) {
+            return {
+                success: false,
+                error: "Current password is incorrect.",
+            };
+        }
+
+        const newPasswordHash = await bcrypt.hash(result.data.newPassword, 10);
+
+        await prisma.user.update({
+            where: { id: session.userId },
+            data: { passwordHash: newPasswordHash },
+        });
+
+        return {
+            success: true,
+            message: "Password updated successfully.",
+        };
+    } catch (error) {
+        console.error("Failed to change password:", error);
+        return {
+            success: false,
+            error: "Failed to update password. Please try again.",
+        };
+    }
+}
+
+export async function deleteStudentAccount() {
+    const session = await getSession();
+
+    if (!session || session.role !== "STUDENT") {
+        redirect("/login");
+    }
+
+    try {
+        const currentStudent = await prisma.student.findUnique({
+            where: { userId: session.userId },
+        });
+
+        if (currentStudent) {
+            await prisma.$transaction(
+                async (tx) => {
+                    await tx.studentRisk.deleteMany({
+                        where: { studentId: currentStudent.id },
+                    });
+                    await tx.loginActivity.deleteMany({
+                        where: { studentId: currentStudent.id },
+                    });
+                    await tx.nudge.deleteMany({
+                        where: { studentId: currentStudent.id },
+                    });
+                    await tx.quizAttempt.deleteMany({
+                        where: { studentId: currentStudent.id },
+                    });
+                    await tx.enrollment.deleteMany({
+                        where: { studentId: currentStudent.id },
+                    });
+                    await tx.student.delete({
+                        where: { id: currentStudent.id },
+                    });
+                    await tx.user.delete({
+                        where: { id: session.userId },
+                    });
+                },
+                {
+                    maxWait: 10000,
+                    timeout: 30000,
+                },
+            );
+        } else {
+            await prisma.user.delete({
+                where: { id: session.userId },
+            });
+        }
+    } catch (error) {
+        console.error("Failed to delete student account:", error);
+        throw new Error("Unable to delete account. Please try again.");
+    }
+
+    await deleteSession();
+    redirect("/register");
+}
+
